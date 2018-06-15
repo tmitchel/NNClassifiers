@@ -9,4 +9,10 @@ This will create a python virtualenv and install keras. You only need to run thi
 
     source pyenv/bin/activate
 
-2.) 
+2.) Get the data into a form that is easy to use
+
+    python format_data.py
+
+3.) Run the network
+
+    python simple_net.py

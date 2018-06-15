@@ -3,10 +3,7 @@
 from os import environ
 environ['KERAS_BACKEND'] = 'tensorflow'
 
-import os
-import h5py
 from argparse import ArgumentParser
-
 parser = ArgumentParser(description="Run neural network to separate Z->TT + 2 jets from VBF")
 parser.add_argument('--verbose', action='store_true',
                     dest='verbose', default=False,
@@ -18,6 +15,8 @@ parser.add_argument('--nhid', '-n', action='store',
                     )
 args = parser.parse_args()
 
+import os
+import h5py
 from keras.models import Model
 from keras.layers import Input, Activation, Dense
 from keras.callbacks import ModelCheckpoint, EarlyStopping
