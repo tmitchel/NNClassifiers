@@ -34,19 +34,18 @@ def build_nn(nhid):
 
   model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
-  if args.verbose:
-    model.summary()
+  # early stopping callback
+  early_stopping = EarlyStopping(monitor='val_loss', patience=10)
 
-    # early stopping callback
-    early_stopping = EarlyStopping(monitor='val_loss', patience=10)
-
-    # model checkpoint callback
-    model_checkpoint = ModelCheckpoint('simple.hdf5', monitor='val_loss',
-    verbose=0, save_best_only=True,
-    save_weights_only=False, mode='auto',
-    period=1)
+  # model checkpoint callback
+  model_checkpoint = ModelCheckpoint('simple.hdf5', monitor='val_loss',
+  verbose=0, save_best_only=True,
+  save_weights_only=False, mode='auto',
+  period=1)
 
   return model
 
 if __name__ == "__main__":
   model = build_nn(args.nhid)
+  if args.verbose:
+    model.summary()
