@@ -9,9 +9,9 @@ This will create a python virtualenv and install keras. You only need to run thi
 
     source pyenv/bin/activate
 
-2.) Get the data into a form that is easy to use
+2.) Convert files from ROOT format to HDF5
 
-    python format_data.py
+    bash convert_root_to_hdf5.sh
 
 3.) Run the network
 
