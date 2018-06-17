@@ -18,6 +18,7 @@ parser.add_argument('--vars', '-v', nargs='+', action='store',
                     help='variables to input to network'
                     )
 args = parser.parse_args()
+args.vars.append('njets')
 
 import os
 import h5py
@@ -27,7 +28,6 @@ from pprint import pprint
 from keras.models import Model
 from keras.layers import Input, Activation, Dense
 from keras.callbacks import ModelCheckpoint, EarlyStopping
-from sklearn.model_selection import train_test_split
 
 input_length = len(args.vars)
 def build_nn(nhid):
@@ -56,43 +56,25 @@ def massage_data(vars, fname, sample_type):
   test = pandas.DataFrame(branches, columns=vars)
   ifile.close()
   ## still trying to figure out how to slice this with arbitrary number of variables
-  test = test[(test[vars[0]] > -100) & (test[vars[1]] > -100)]
+  test = test[(test[vars[0]] > -100) & (test[vars[1]] > -100 & (test['njets'] > 1))]
   if 'bkg' in sample_type:
     test['isSignal'] = np.zeros(len(test))
   else:
     test['isSignal'] = np.ones(len(test))
   return test
 
-if __name__ == "__main__":
-  ## build NN
-  model, callbacks = build_nn(args.nhid)
-  if args.verbose:
-    model.summary()
-
-  ## format the data
-  sig = massage_data(args.vars, "input_files/ggHtoTauTau125_svFit_MELA.h5", "sig")
-  bkg = massage_data(args.vars, "input_files/DYJets_svFit_MELA.h5", "bkg")
-  all_data = pandas.concat([sig, bkg])
-  dataset = all_data.values
-  data = dataset[:,0:input_length]
-  labels = dataset[:,input_length]
-  data_train_val, data_test, label_train_val, label_test = train_test_split(data, labels, test_size=0.2, random_state=7)
-
+def final_formatting(data, labels):
   from sklearn.preprocessing import StandardScaler
+  from sklearn.model_selection import train_test_split
+
+  data_train_val, data_test, label_train_val, label_test = train_test_split(data, labels, test_size=0.2, random_state=7)
   scaler = StandardScaler().fit(data_train_val)
   data_train_val = scaler.transform(data_train_val)
   data_test = scaler.transform(data_test)
 
-  ## train the NN
-  history = model.fit(data_train_val,
-                    label_train_val,
-                    epochs=100,
-                    batch_size=1024,
-                    verbose=1, # switch to 1 for more verbosity
-                    callbacks=callbacks,
-                    validation_split=0.25)
-  # pprint(history.history)
+  return data_train_val, data_test, label_train_val, label_test
 
+def build_plots(history):
   import  matplotlib.pyplot  as plt
   # plot loss vs epoch
   plt.figure(figsize=(15,10))
@@ -126,3 +108,29 @@ if __name__ == "__main__":
   ax.set_title('receiver operating curve')
   ax.legend(loc="lower right")
   plt.show()
+
+if __name__ == "__main__":
+  ## build NN
+  model, callbacks = build_nn(args.nhid)
+  if args.verbose:
+    model.summary()
+
+  ## format the data
+  sig = massage_data(args.vars, "input_files/ggHtoTauTau125_svFit_MELA.h5", "sig")
+  bkg = massage_data(args.vars, "input_files/DYJets2_svFit_MELA.h5", "bkg")
+  all_data = pandas.concat([sig, bkg])
+  dataset = all_data.values
+  data = dataset[:,0:input_length]
+  labels = dataset[:,input_length]
+  data_train_val, data_test, label_train_val, label_test = final_formatting(data, labels)
+
+  ## train the NN
+  history = model.fit(data_train_val,
+                    label_train_val,
+                    epochs=100,
+                    batch_size=1024,
+                    verbose=1, # switch to 1 for more verbosity
+                    callbacks=callbacks,
+                    validation_split=0.25)
+
+  build_plots(history)
