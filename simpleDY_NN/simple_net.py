@@ -57,10 +57,12 @@ def massage_data(vars, fname, sample_type):
   ifile.close()
   ## still trying to figure out how to slice this with arbitrary number of variables
   test = test[(test[vars[0]] > -100) & (test[vars[1]] > -100)]
+
   if 'bkg' in sample_type:
     test['isSignal'] = np.zeros(len(test))
   else:
     test['isSignal'] = np.ones(len(test))
+  print test.values
   return test
 
 def final_formatting(data, labels):
@@ -99,15 +101,16 @@ def build_plots(history):
   fpr, tpr, thresholds = roc_curve(label_test, label_predict)
   roc_auc = auc(fpr, tpr)
   ax = plt.subplot(2, 2, 3)
-  ax.plot(fpr, tpr, lw=2, color='cyan', label='auc = %.3f' % (roc_auc))
+  ax.plot(tpr, fpr, lw=2, color='cyan', label='auc = %.3f' % (roc_auc))
   ax.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
   ax.set_xlim([0, 1.0])
   ax.set_ylim([0, 1.0])
-  ax.set_xlabel('false positive rate')
-  ax.set_ylabel('true positive rate')
+  ax.set_xlabel('true positive rate')
+  ax.set_ylabel('false positive rate')
   ax.set_title('receiver operating curve')
   ax.legend(loc="lower right")
   plt.show()
+  plt.savefig('layer2_node{}_NN.pdf'.format(args.nhid))
 
 if __name__ == "__main__":
   ## build NN
