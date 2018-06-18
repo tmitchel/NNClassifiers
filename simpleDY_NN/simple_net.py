@@ -57,10 +57,12 @@ def massage_data(vars, fname, sample_type):
   ifile.close()
   ## still trying to figure out how to slice this with arbitrary number of variables
   test = test[(test[vars[0]] > -100) & (test[vars[1]] > -100)]
+  #test.drop('numGenJets', axis=1)
   if 'bkg' in sample_type:
     test['isSignal'] = np.zeros(len(test))
   else:
     test['isSignal'] = np.ones(len(test))
+  print test.values
   return test
 
 if __name__ == "__main__":
@@ -70,8 +72,8 @@ if __name__ == "__main__":
     model.summary()
 
   ## format the data
-  sig = massage_data(args.vars, "input_files/ggHtoTauTau125_svFit_MELA.h5", "sig")
-  bkg = massage_data(args.vars, "input_files/DYJets_svFit_MELA.h5", "bkg")
+  sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
+  bkg = massage_data(args.vars, "input_files/DY.h5", "bkg")
   all_data = pandas.concat([sig, bkg])
   dataset = all_data.values
   data = dataset[:,0:input_length]
@@ -86,7 +88,7 @@ if __name__ == "__main__":
   ## train the NN
   history = model.fit(data_train_val,
                     label_train_val,
-                    epochs=100,
+                    epochs=1000,
                     batch_size=1024,
                     verbose=1, # switch to 1 for more verbosity
                     callbacks=callbacks,
@@ -117,12 +119,13 @@ if __name__ == "__main__":
   fpr, tpr, thresholds = roc_curve(label_test, label_predict)
   roc_auc = auc(fpr, tpr)
   ax = plt.subplot(2, 2, 3)
-  ax.plot(fpr, tpr, lw=2, color='cyan', label='auc = %.3f' % (roc_auc))
+  ax.plot(tpr, fpr, lw=2, color='cyan', label='auc = %.3f' % (roc_auc))
   ax.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
   ax.set_xlim([0, 1.0])
   ax.set_ylim([0, 1.0])
-  ax.set_xlabel('false positive rate')
-  ax.set_ylabel('true positive rate')
+  ax.set_xlabel('true positive rate')
+  ax.set_ylabel('false positive rate')
   ax.set_title('receiver operating curve')
   ax.legend(loc="lower right")
   plt.show()
+  plt.savefig('layer2_node{}_NN.pdf'.format(args.nhid))
