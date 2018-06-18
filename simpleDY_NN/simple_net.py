@@ -56,7 +56,7 @@ def massage_data(vars, fname, sample_type):
   test = pandas.DataFrame(branches, columns=vars)
   ifile.close()
   ## still trying to figure out how to slice this with arbitrary number of variables
-  test = test[(test[vars[0]] > -100) & (test[vars[1]] > -100 & (test['njets'] > 1))]
+  test = test[(test[vars[0]] > -100) & (test[vars[1]] > -100)]
   if 'bkg' in sample_type:
     test['isSignal'] = np.zeros(len(test))
   else:
@@ -116,8 +116,8 @@ if __name__ == "__main__":
     model.summary()
 
   ## format the data
-  sig = massage_data(args.vars, "input_files/ggHtoTauTau125_svFit_MELA.h5", "sig")
-  bkg = massage_data(args.vars, "input_files/DYJets2_svFit_MELA.h5", "bkg")
+  sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
+  bkg = massage_data(args.vars, "input_files/DY.h5", "bkg")
   all_data = pandas.concat([sig, bkg])
   dataset = all_data.values
   data = dataset[:,0:input_length]
@@ -127,7 +127,7 @@ if __name__ == "__main__":
   ## train the NN
   history = model.fit(data_train_val,
                     label_train_val,
-                    epochs=100,
+                    epochs=1000,
                     batch_size=1024,
                     verbose=1, # switch to 1 for more verbosity
                     callbacks=callbacks,
