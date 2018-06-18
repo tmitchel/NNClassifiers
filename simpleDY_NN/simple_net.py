@@ -109,7 +109,7 @@ def build_plots(history):
   ax.set_ylabel('false positive rate')
   ax.set_title('receiver operating curve')
   ax.legend(loc="lower right")
-  plt.show()
+  #plt.show()
   plt.savefig('layer2_node{}_NN.pdf'.format(args.nhid))
 
 if __name__ == "__main__":
