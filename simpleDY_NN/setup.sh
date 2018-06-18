@@ -7,3 +7,5 @@ source pyenv/bin/activate # activate.csh for tcsh
 eval `scramv1 runtime -sh` # cmsenv
 
 pip install keras
+pip install tables
+pip install pandas
