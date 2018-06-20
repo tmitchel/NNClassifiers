@@ -18,7 +18,8 @@ parser.add_argument('--vars', '-v', nargs='+', action='store',
                     help='variables to input to network'
                     )
 args = parser.parse_args()
-args.vars.append('njets')
+args.vars.append('numGenJets')
+input_length = len(args.vars)
 
 import os
 import h5py
@@ -29,13 +30,16 @@ from keras.models import Model
 from keras.layers import Input, Activation, Dense
 from keras.callbacks import ModelCheckpoint, EarlyStopping
 
-input_length = len(args.vars)
+
 def build_nn(nhid):
+  """ Build and return the model with callback functions """
   inputs = Input(shape = (input_length,), name = 'input')
   hidden = Dense(nhid, name = 'hidden', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
-  hidden = Dense(nhid, name = 'hidden2', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
+  # hidden = Dense(nhid, name = 'hidden2', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
   outputs = Dense(1, name = 'output', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
   model = Model(inputs = inputs, outputs = outputs)
+
+  # model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'], loss_weights=[1, 0])
   model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
   # early stopping callback
@@ -50,22 +54,25 @@ def build_nn(nhid):
   return model, [early_stopping, model_checkpoint]
 
 def massage_data(vars, fname, sample_type):
+  """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
   ifile = h5py.File(fname, 'r')
   slicer = tuple(vars)
   branches = ifile["tt_tree"][slicer]
-  test = pandas.DataFrame(branches, columns=vars)
+  df = pandas.DataFrame(branches, columns=vars)
   ifile.close()
   ## still trying to figure out how to slice this with arbitrary number of variables
-  test = test[(test[vars[0]] > -100) & (test[vars[1]] > -100)]
+  df = df[(df[vars[0]] > -100) & (df[vars[1]] > -100) & (df['numGenJets'] > 1)]
+  print df
 
   if 'bkg' in sample_type:
-    test['isSignal'] = np.zeros(len(test))
+    df['isSignal'] = np.zeros(len(df))
   else:
-    test['isSignal'] = np.ones(len(test))
-  print test.values
-  return test
+    df['isSignal'] = np.ones(len(df))
+
+  return df
 
 def final_formatting(data, labels):
+  """ split data into testing and validation then scale and return collections """
   from sklearn.preprocessing import StandardScaler
   from sklearn.model_selection import train_test_split
 
@@ -76,7 +83,8 @@ def final_formatting(data, labels):
 
   return data_train_val, data_test, label_train_val, label_test
 
-def build_plots(history):
+def build_plots(history, other=None):
+  """ do whatever plotting is needed """
   import  matplotlib.pyplot  as plt
   # plot loss vs epoch
   plt.figure(figsize=(15,10))
@@ -102,7 +110,10 @@ def build_plots(history):
   roc_auc = auc(fpr, tpr)
   ax = plt.subplot(2, 2, 3)
   ax.plot(tpr, fpr, lw=2, color='cyan', label='auc = %.3f' % (roc_auc))
+  if other != None:
+      fpr2, tpr2, thresholds2, roc_auc2 = other()
   ax.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
+  ax.plot(tpr2, fpr2, lw=2, color='red', label='auc = %.3f' % (roc_auc2))
   ax.set_xlim([0, 1.0])
   ax.set_ylim([0, 1.0])
   ax.set_xlabel('true positive rate')
@@ -111,6 +122,36 @@ def build_plots(history):
   ax.legend(loc="lower right")
   #plt.show()
   plt.savefig('layer2_node{}_NN.pdf'.format(args.nhid))
+
+def getData(fname, isSignal):
+    """ take a filename and return a DataFrame with isSignal and Dbkg_VBF """
+    ifile = h5py.File('input_files/'+fname, 'r')
+    ibranch = ifile['tt_tree'][('Dbkg_VBF')]
+    df = pandas.DataFrame(ibranch)
+    ifile.close()
+
+    df = df[(df[0] > -100)]
+
+    if isSignal:
+        df['isSignal'] = np.ones(len(df))
+    else:
+        df['isSignal'] = np.zeros(len(df))
+
+    return df
+
+def MELA_ROC():
+    """ read h5 file and return info for making a ROC curve from MELA disc. """
+    from sklearn.metrics import roc_curve, auc
+    sig = getData('VBFHtoTauTau125_svFit_MELA.h5', True)
+    bkg = getData('DY.h5', False)
+    all_data = pandas.concat([sig, bkg])
+    dataset = all_data.values
+    data = dataset[:,0:1]
+    labels = dataset[:,1]
+    fpr, tpr, thresholds = roc_curve(labels, data)
+    roc_auc = auc(fpr, tpr)
+    return fpr, tpr, thresholds, roc_auc
+
 
 if __name__ == "__main__":
   ## build NN
@@ -136,4 +177,4 @@ if __name__ == "__main__":
                     callbacks=callbacks,
                     validation_split=0.25)
 
-  build_plots(history)
+  build_plots(history, MELA_ROC)
