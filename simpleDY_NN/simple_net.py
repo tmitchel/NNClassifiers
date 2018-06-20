@@ -69,14 +69,11 @@ def massage_data(vars, fname, sample_type):
 
   if 'bkg' in sample_type:
     df = df[(df[vars[0]] > -100) & (df[vars[1]] > -100) & (df['numGenJets'] == 2)]
-    print df.shape
     df['isSignal'] = np.zeros(len(df))
   else:
     df = df[(df[vars[0]] > -100) & (df[vars[1]] > -100)]
-    print df.shape
     df['isSignal'] = np.ones(len(df))
 
-  print df
   df.drop('numGenJets', axis=1)
   print 'Data salad tossed and ready to go.'
   return df
@@ -164,19 +161,22 @@ def MELA_ROC():
 
 
 if __name__ == "__main__":
-  ## build NN
-  model, callbacks = build_nn(args.nhid)
-  if args.verbose:
-    model.summary()
-
   ## format the data
   sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
-  bkg = massage_data(args.vars, "input_files/DY.h5", "bkg")
+  bkg = massage_data(args.vars, "input_files/DYJets2_svFit_MELA.h5", "bkg")
   all_data = pandas.concat([sig, bkg])
   dataset = all_data.values
   data = dataset[:,0:input_length]
   labels = dataset[:,input_length]
   data_train_val, data_test, label_train_val, label_test = final_formatting(data, labels)
+
+  ## build NN
+  model, callbacks = build_nn(args.nhid)
+  if args.verbose:
+    model.summary()
+
+  ## weight array for when we use different samples
+  weights = np.array([1 for i in label_train_val])
 
   ## train the NN
   history = model.fit(data_train_val,
@@ -185,6 +185,8 @@ if __name__ == "__main__":
                     batch_size=1024,
                     verbose=1, # switch to 1 for more verbosity
                     callbacks=callbacks,
-                    validation_split=0.25)
+                    validation_split=0.25, 
+                    sample_weight=weights		    
+)
 
   build_plots(history, MELA_ROC)
