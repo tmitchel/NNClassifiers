@@ -33,6 +33,8 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 
 def build_nn(nhid):
   """ Build and return the model with callback functions """
+
+  print 'Building the network...' 
   inputs = Input(shape = (input_length,), name = 'input')
   hidden = Dense(nhid, name = 'hidden', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
   # hidden = Dense(nhid, name = 'hidden2', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
@@ -51,24 +53,32 @@ def build_nn(nhid):
                      save_weights_only=False, mode='auto',
                      period=1)
 
+  print 'Build complete.'
   return model, [early_stopping, model_checkpoint]
 
 def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
+
+  print 'Slicing and dicing...'
   ifile = h5py.File(fname, 'r')
   slicer = tuple(vars)
   branches = ifile["tt_tree"][slicer]
   df = pandas.DataFrame(branches, columns=vars)
   ifile.close()
   ## still trying to figure out how to slice this with arbitrary number of variables
-  df = df[(df[vars[0]] > -100) & (df[vars[1]] > -100) & (df['numGenJets'] > 1)]
-  print df
 
   if 'bkg' in sample_type:
+    df = df[(df[vars[0]] > -100) & (df[vars[1]] > -100) & (df['numGenJets'] == 2)]
+    print df.shape
     df['isSignal'] = np.zeros(len(df))
   else:
+    df = df[(df[vars[0]] > -100) & (df[vars[1]] > -100)]
+    print df.shape
     df['isSignal'] = np.ones(len(df))
 
+  print df
+  df.drop('numGenJets', axis=1)
+  print 'Data salad tossed and ready to go.'
   return df
 
 def final_formatting(data, labels):
