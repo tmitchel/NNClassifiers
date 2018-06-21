@@ -19,7 +19,6 @@ parser.add_argument('--vars', '-v', nargs='+', action='store',
                     )
 args = parser.parse_args()
 input_length = len(args.vars)
-args.vars.append('numGenJets')
 
 cross_sections = {
   0: 1.42383,
@@ -66,13 +65,13 @@ def massage_data(vars, fname, sample_type):
 
   print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
-  slicer = tuple(vars) + ("Dbkg_VBF","njets","pt_sv","jeta_1", "jeta_2")
+  slicer = tuple(vars) + ("numGenJets", "Dbkg_VBF", "njets", "pt_sv", "jeta_1", "jeta_2")
   branches = ifile["tt_tree"][slicer]
   df_roc = pandas.DataFrame(branches, columns=['Dbkg_VBF'])
   df = pandas.DataFrame(branches, columns=slicer)
   ifile.close()
 
-  sig_cuts = (df[vars[0]] > -100) & (df['pt_sv'] > 100) & (df['njets'] == 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)
+  sig_cuts = (df[vars[0]] > -100) & (df['pt_sv'] > 100) & (df['njets'] >= 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)
   bkg_cuts = sig_cuts & (df['numGenJets'] == 2)
 
   if 'bkg' in sample_type:
