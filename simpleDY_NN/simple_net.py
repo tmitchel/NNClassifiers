@@ -91,7 +91,6 @@ def massage_data(vars, fname, sample_type):
     df_roc['isSignal'] = np.ones(len(df_roc))
 
   df = df.drop(['numGenJets', 'Dbkg_VBF', 'njets', 'pt_sv', 'jeta_1', 'jeta_2'], axis=1)
-  print fname.split('.h5')[0].split('input_files/')[-1], 'data is good to go.'
   return df, df_roc
 
 def final_formatting(data, labels):
@@ -129,10 +128,10 @@ def build_plots(history, other=None):
   fpr, tpr, thresholds = roc_curve(label_test, label_predict)
   roc_auc = auc(fpr, tpr)
   plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
-  plt.plot(tpr, fpr, lw=2, color='cyan', label='auc = %.3f' % (roc_auc))
+  plt.plot(tpr, fpr, lw=2, color='cyan', label='NN auc = %.3f' % (roc_auc))
   if other != None:
     fpr2, tpr2, thresholds2, roc_auc2 = other
-    plt.plot(tpr2, fpr2, lw=2, color='red', label='auc = %.3f' % (roc_auc2))
+    plt.plot(tpr2, fpr2, lw=2, color='red', label='MELA auc = %.3f' % (roc_auc2))
   plt.xlim([0, 1.0])
   plt.ylim([0, 1.0])
   plt.xlabel('true positive rate')
