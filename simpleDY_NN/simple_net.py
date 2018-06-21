@@ -21,7 +21,15 @@ args = parser.parse_args()
 input_length = len(args.vars)
 args.vars.append('numGenJets')
 
-import os
+cross_sections = {
+  0: 1.42383,
+  1: 0.45846,
+  2: 0.46762,
+  3: 0.48084,
+  4: 0.39415,
+  5: 1.0,
+}
+
 import h5py
 import pandas
 import numpy as np
@@ -29,7 +37,6 @@ from pprint import pprint
 from keras.models import Model
 from keras.layers import Input, Activation, Dense
 from keras.callbacks import ModelCheckpoint, EarlyStopping
-
 
 def build_nn(nhid):
   """ Build and return the model with callback functions """
@@ -59,26 +66,31 @@ def massage_data(vars, fname, sample_type):
 
   print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
-  slicer = tuple(vars) + ("Dbkg_VBF",)
+  slicer = tuple(vars) + ("Dbkg_VBF","njets","pt_sv","jeta_1", "jeta_2")
   branches = ifile["tt_tree"][slicer]
   df_roc = pandas.DataFrame(branches, columns=['Dbkg_VBF'])
-  df = pandas.DataFrame(branches, columns=vars)
+  df = pandas.DataFrame(branches, columns=slicer)
   ifile.close()
 
+  sig_cuts = (df[vars[0]] > -100) & (df['pt_sv'] > 100) & (df['njets'] == 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)
+  bkg_cuts = sig_cuts & (df['numGenJets'] == 2)
+
   if 'bkg' in sample_type:
-    df = df[(df[vars[0]] > -100) & (df[vars[1]] > -100) & (df['numGenJets'] == 2)]
+    df = df[bkg_cuts]
     df['isSignal'] = np.zeros(len(df))
+    df['weight'] = np.array([cross_sections[i] for i in df['numGenJets']])
 
     df_roc = df_roc[(df_roc['Dbkg_VBF'] > -100)]
     df_roc['isSignal'] = np.zeros(len(df_roc))
   else:
-    df = df[(df[vars[0]] > -100) & (df[vars[1]] > -100)]
+    df = df[sig_cuts]
     df['isSignal'] = np.ones(len(df))
+    df['weight'] = np.ones(len(df))
 
     df_roc = df_roc[(df_roc['Dbkg_VBF'] > -100)]
     df_roc['isSignal'] = np.ones(len(df_roc))
 
-  df = df.drop('numGenJets', axis=1)
+  df = df.drop(['numGenJets', 'Dbkg_VBF', 'njets', 'pt_sv', 'jeta_1', 'jeta_2'], axis=1)
   print fname.split('.h5')[0].split('input_files/')[-1], 'data is good to go.'
   return df, df_roc
 
@@ -108,7 +120,7 @@ def MELA_ROC(sig, bkg):
 def build_plots(history, other=None):
   """ do whatever plotting is needed """
   import  matplotlib.pyplot  as plt
-  # plot loss vs epoch
+
   plt.figure(figsize=(15,10))
 
   # Plot ROC
@@ -116,11 +128,11 @@ def build_plots(history, other=None):
   from sklearn.metrics import roc_curve, auc
   fpr, tpr, thresholds = roc_curve(label_test, label_predict)
   roc_auc = auc(fpr, tpr)
+  plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
+  plt.plot(tpr, fpr, lw=2, color='cyan', label='auc = %.3f' % (roc_auc))
   if other != None:
     fpr2, tpr2, thresholds2, roc_auc2 = other
-  plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
-  plt.plot(tpr2, fpr2, lw=2, color='red', label='auc = %.3f' % (roc_auc2))
-  plt.plot(tpr, fpr, lw=2, color='cyan', label='auc = %.3f' % (roc_auc))
+    plt.plot(tpr2, fpr2, lw=2, color='red', label='auc = %.3f' % (roc_auc2))
   plt.xlim([0, 1.0])
   plt.ylim([0, 1.0])
   plt.xlabel('true positive rate')
@@ -128,8 +140,9 @@ def build_plots(history, other=None):
   plt.title('receiver operating curve')
   plt.legend(loc="upper left")
   #plt.show()
-  plt.savefig('layer2_node{}_NN.pdf'.format(args.nhid))
+  plt.savefig('layer1_node{}_NN.pdf'.format(args.nhid))
 
+  # plot loss vs epoch
   ax = plt.subplot(2, 1, 1)
   ax.plot(history.history['loss'], label='loss')
   ax.plot(history.history['val_loss'], label='val_loss')
@@ -146,7 +159,6 @@ def build_plots(history, other=None):
   ax.set_ylabel('acc')
   plt.show()
 
-
 if __name__ == "__main__":
   ## format the data
   sig, mela_sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
@@ -154,23 +166,22 @@ if __name__ == "__main__":
   all_data = pandas.concat([sig, bkg])
   dataset = all_data.values
   data = dataset[:,0:input_length]
-  labels = dataset[:,input_length]
+  labels = dataset[:,input_length:]
   data_train_val, data_test, label_train_val, label_test = final_formatting(data, labels)
+  label_train_val, weights = label_train_val[:,0], label_train_val[:,1]
+  label_test = label_test[:,0]
 
   ## build NN
   model, callbacks = build_nn(args.nhid)
   if args.verbose:
     model.summary()
 
-  ## weight array for when we use different samples
-  weights = np.array([1 for i in label_train_val])
-
   ## train the NN
   history = model.fit(data_train_val,
                     label_train_val,
-                    epochs=1000,
+                    epochs=5000,
                     batch_size=1024,
-                    verbose=1, # switch to 1 for more verbosity
+                    verbose=args.verbose, # switch to 1 for more verbosity
                     callbacks=callbacks,
                     validation_split=0.25,
                     sample_weight=weights
