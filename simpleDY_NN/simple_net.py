@@ -18,8 +18,8 @@ parser.add_argument('--vars', '-v', nargs='+', action='store',
                     help='variables to input to network'
                     )
 args = parser.parse_args()
-args.vars.append('numGenJets')
 input_length = len(args.vars)
+args.vars.append('numGenJets')
 
 import os
 import h5py
@@ -34,14 +34,12 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 def build_nn(nhid):
   """ Build and return the model with callback functions """
 
-  print 'Building the network...' 
+  print 'Building the network...'
   inputs = Input(shape = (input_length,), name = 'input')
   hidden = Dense(nhid, name = 'hidden', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
   # hidden = Dense(nhid, name = 'hidden2', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
   outputs = Dense(1, name = 'output', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
   model = Model(inputs = inputs, outputs = outputs)
-
-  # model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'], loss_weights=[1, 0])
   model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
   # early stopping callback
@@ -59,24 +57,30 @@ def build_nn(nhid):
 def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
 
-  print 'Slicing and dicing...'
+  print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
-  slicer = tuple(vars)
+  slicer = tuple(vars) + ("Dbkg_VBF",)
   branches = ifile["tt_tree"][slicer]
+  df_roc = pandas.DataFrame(branches, columns=['Dbkg_VBF'])
   df = pandas.DataFrame(branches, columns=vars)
   ifile.close()
-  ## still trying to figure out how to slice this with arbitrary number of variables
 
   if 'bkg' in sample_type:
     df = df[(df[vars[0]] > -100) & (df[vars[1]] > -100) & (df['numGenJets'] == 2)]
     df['isSignal'] = np.zeros(len(df))
+
+    df_roc = df_roc[(df_roc['Dbkg_VBF'] > -100)]
+    df_roc['isSignal'] = np.zeros(len(df_roc))
   else:
     df = df[(df[vars[0]] > -100) & (df[vars[1]] > -100)]
     df['isSignal'] = np.ones(len(df))
 
-  df.drop('numGenJets', axis=1)
-  print 'Data salad tossed and ready to go.'
-  return df
+    df_roc = df_roc[(df_roc['Dbkg_VBF'] > -100)]
+    df_roc['isSignal'] = np.ones(len(df_roc))
+
+  df = df.drop('numGenJets', axis=1)
+  print fname.split('.h5')[0].split('input_files/')[-1], 'data is good to go.'
+  return df, df_roc
 
 def final_formatting(data, labels):
   """ split data into testing and validation then scale and return collections """
@@ -90,12 +94,43 @@ def final_formatting(data, labels):
 
   return data_train_val, data_test, label_train_val, label_test
 
+def MELA_ROC(sig, bkg):
+  """ read h5 file and return info for making a ROC curve from MELA disc. """
+  from sklearn.metrics import roc_curve, auc
+  all_data = pandas.concat([sig, bkg])
+  dataset = all_data.values
+  data = dataset[:,0:1]
+  labels = dataset[:,1]
+  fpr, tpr, thresholds = roc_curve(labels, data)
+  roc_auc = auc(fpr, tpr)
+  return fpr, tpr, thresholds, roc_auc
+
 def build_plots(history, other=None):
   """ do whatever plotting is needed """
   import  matplotlib.pyplot  as plt
   # plot loss vs epoch
   plt.figure(figsize=(15,10))
-  ax = plt.subplot(2, 2, 1)
+
+  # Plot ROC
+  label_predict = model.predict(data_test)
+  from sklearn.metrics import roc_curve, auc
+  fpr, tpr, thresholds = roc_curve(label_test, label_predict)
+  roc_auc = auc(fpr, tpr)
+  if other != None:
+    fpr2, tpr2, thresholds2, roc_auc2 = other
+  plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
+  plt.plot(tpr2, fpr2, lw=2, color='red', label='auc = %.3f' % (roc_auc2))
+  plt.plot(tpr, fpr, lw=2, color='cyan', label='auc = %.3f' % (roc_auc))
+  plt.xlim([0, 1.0])
+  plt.ylim([0, 1.0])
+  plt.xlabel('true positive rate')
+  plt.ylabel('false positive rate')
+  plt.title('receiver operating curve')
+  plt.legend(loc="upper left")
+  #plt.show()
+  plt.savefig('layer2_node{}_NN.pdf'.format(args.nhid))
+
+  ax = plt.subplot(2, 1, 1)
   ax.plot(history.history['loss'], label='loss')
   ax.plot(history.history['val_loss'], label='val_loss')
   ax.legend(loc="upper right")
@@ -103,67 +138,19 @@ def build_plots(history, other=None):
   ax.set_ylabel('loss')
 
   # plot accuracy vs epoch
-  ax = plt.subplot(2, 2, 2)
+  ax = plt.subplot(2, 1, 2)
   ax.plot(history.history['acc'], label='acc')
   ax.plot(history.history['val_acc'], label='val_acc')
   ax.legend(loc="upper left")
   ax.set_xlabel('epoch')
   ax.set_ylabel('acc')
-
-  # Plot ROC
-  label_predict = model.predict(data_test)
-  from sklearn.metrics import roc_curve, auc
-  fpr, tpr, thresholds = roc_curve(label_test, label_predict)
-  roc_auc = auc(fpr, tpr)
-  ax = plt.subplot(2, 2, 3)
-  ax.plot(tpr, fpr, lw=2, color='cyan', label='auc = %.3f' % (roc_auc))
-  if other != None:
-      fpr2, tpr2, thresholds2, roc_auc2 = other()
-  ax.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
-  ax.plot(tpr2, fpr2, lw=2, color='red', label='auc = %.3f' % (roc_auc2))
-  ax.set_xlim([0, 1.0])
-  ax.set_ylim([0, 1.0])
-  ax.set_xlabel('true positive rate')
-  ax.set_ylabel('false positive rate')
-  ax.set_title('receiver operating curve')
-  ax.legend(loc="lower right")
-  #plt.show()
-  plt.savefig('layer2_node{}_NN.pdf'.format(args.nhid))
-
-def getData(fname, isSignal):
-    """ take a filename and return a DataFrame with isSignal and Dbkg_VBF """
-    ifile = h5py.File('input_files/'+fname, 'r')
-    ibranch = ifile['tt_tree'][('Dbkg_VBF')]
-    df = pandas.DataFrame(ibranch)
-    ifile.close()
-
-    df = df[(df[0] > -100)]
-
-    if isSignal:
-        df['isSignal'] = np.ones(len(df))
-    else:
-        df['isSignal'] = np.zeros(len(df))
-
-    return df
-
-def MELA_ROC():
-    """ read h5 file and return info for making a ROC curve from MELA disc. """
-    from sklearn.metrics import roc_curve, auc
-    sig = getData('VBFHtoTauTau125_svFit_MELA.h5', True)
-    bkg = getData('DY.h5', False)
-    all_data = pandas.concat([sig, bkg])
-    dataset = all_data.values
-    data = dataset[:,0:1]
-    labels = dataset[:,1]
-    fpr, tpr, thresholds = roc_curve(labels, data)
-    roc_auc = auc(fpr, tpr)
-    return fpr, tpr, thresholds, roc_auc
+  plt.show()
 
 
 if __name__ == "__main__":
   ## format the data
-  sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
-  bkg = massage_data(args.vars, "input_files/DYJets2_svFit_MELA.h5", "bkg")
+  sig, mela_sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
+  bkg, mela_bkg = massage_data(args.vars, "input_files/DYJets2_svFit_MELA.h5", "bkg")
   all_data = pandas.concat([sig, bkg])
   dataset = all_data.values
   data = dataset[:,0:input_length]
@@ -185,8 +172,8 @@ if __name__ == "__main__":
                     batch_size=1024,
                     verbose=1, # switch to 1 for more verbosity
                     callbacks=callbacks,
-                    validation_split=0.25, 
-                    sample_weight=weights		    
-)
+                    validation_split=0.25,
+                    sample_weight=weights
+  )
 
-  build_plots(history, MELA_ROC)
+  build_plots(history, MELA_ROC(mela_sig, mela_bkg))
