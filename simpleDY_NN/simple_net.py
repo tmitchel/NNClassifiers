@@ -21,6 +21,18 @@ parser.add_argument('--njet', '-N', action='store_true',
                     dest='njet', default=False,
                     help='run on DY + n-jets'
                     )
+parser.add_argument('--addToFile', '-a', action='store_true',
+                    dest='addToFile', default=False,
+                    help='Add NN discriminant to tree'
+                    )
+parser.add_argument('--input', '-i', action='store',
+                    dest='input', default=None, type=str,
+                    help='File with events to input to NN'
+                    )
+parser.add_argument('--retrain', '-r', action='store_true',
+                    dest='retrain', default=False,
+                    help='retrain the NN'
+                    )
 args = parser.parse_args()
 input_length = len(args.vars)
 
@@ -40,6 +52,7 @@ cross_sections = {
   'VBF125': getWeight(3.782*0.0627, 'VBFHtoTauTau125_svFit_MELA.root'),
 }
 
+import os
 import h5py
 import pandas
 import numpy as np
@@ -57,19 +70,23 @@ def build_nn(nhid):
   # hidden = Dense(nhid, name = 'hidden2', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
   outputs = Dense(1, name = 'output', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
   model = Model(inputs = inputs, outputs = outputs)
+  callbacks = []
+  if os.path.exists('model_checkpoint.hdf5') and not args.retrain:
+    model.load_weights('model_checkpoint.hdf5')
+  else:
+    # early stopping callback
+    early_stopping = EarlyStopping(monitor='val_loss', patience=10)
+
+    # model checkpoint callback
+    model_checkpoint = ModelCheckpoint('model_checkpoint.hdf5', monitor='val_loss',
+                       verbose=0, save_best_only=True,
+                       save_weights_only=False, mode='auto',
+                       period=1)
+    callbacks = [early_stopping, model_checkpoint]
+
   model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-
-  # early stopping callback
-  early_stopping = EarlyStopping(monitor='val_loss', patience=10)
-
-  # model checkpoint callback
-  model_checkpoint = ModelCheckpoint('model_checkpoint.hdf5', monitor='val_loss',
-                     verbose=0, save_best_only=True,
-                     save_weights_only=False, mode='auto',
-                     period=1)
-
   print 'Build complete.'
-  return model, [early_stopping, model_checkpoint]
+  return model, callbacks
 
 def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
@@ -169,6 +186,36 @@ def build_plots(history, other=None):
   ax.set_ylabel('acc')
   plt.show()
 
+def putInTree(fname, discs):
+  from ROOT import TFile, TTree, TBranch
+  from array import array
+  fin = TFile('input_files/'+fname+'.root', 'update')
+  itree = fin.Get('tt_tree')
+  nentries = itree.GetEntries()
+  fout = TFile('input_files/'+fname+'_NN.root', 'recreate')
+  fout.cd()
+  ntree = itree.CloneTree()
+  adiscs = array('f', [0.])
+  Q2s = array('f', [0.])
+  disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')
+  j = 0
+  for i in range(nentries):
+    itree.GetEntry(i)
+
+    if itree.GetLeaf('Q2V1').GetValue() != -100 and itree.GetLeaf('pt_sv').GetValue() > 100 and itree.GetLeaf('njets').GetValue() >= 2 \
+    and abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) > 2.5 and ('VBF' in fname or itree.GetLeaf('numGenJets').GetValue() == 2):
+      adiscs[0] = discs[j][0]
+      j += 1
+    else:
+      adiscs[0] = -100
+    fout.cd()
+    disc_branch.Fill()
+
+  fin.Close()
+  fout.cd()
+  ntree.Write()
+  print 'in tree'
+
 if __name__ == "__main__":
   ## format the data
   sig, mela_sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
@@ -186,15 +233,37 @@ if __name__ == "__main__":
   if args.verbose:
     model.summary()
 
-  ## train the NN
-  history = model.fit(data_train_val,
-                    label_train_val,
-                    epochs=5000,
-                    batch_size=1024,
-                    verbose=args.verbose, # switch to 1 for more verbosity
-                    callbacks=callbacks,
-                    validation_split=0.25,
-                    sample_weight=weights
-  )
+  if len(callbacks) > 0:
+    ## train the NN
+    history = model.fit(data_train_val,
+                      label_train_val,
+                      epochs=5000,
+                      batch_size=1024,
+                      verbose=args.verbose, # switch to 1 for more verbosity
+                      callbacks=callbacks,
+                      validation_split=0.25,
+                      sample_weight=weights
+    )
 
-  build_plots(history, MELA_ROC(mela_sig, mela_bkg))
+    if args.verbose:
+      build_plots(history, MELA_ROC(mela_sig, mela_bkg))
+
+  if args.input != None:
+    ifile = h5py.File('input_files/'+args.input+'.h5', 'r')
+    slicer = tuple(args.vars) + ("numGenJets", "njets", "pt_sv", "jeta_1", "jeta_2")
+    branches = ifile["tt_tree"][slicer]
+    df = pandas.DataFrame(branches, columns=slicer)
+    ifile.close()
+
+    cuts = (df[args.vars[0]] > -100) & (df['pt_sv'] > 100) & (df['njets'] >= 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)
+    if not args.njet and 'VBF' not in args.input:
+      cuts = cuts & (df['numGenJets'] == 2)
+
+    df = df[cuts]
+    df = df.drop(['numGenJets', 'njets', 'pt_sv', 'jeta_1', 'jeta_2'], axis=1)
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.model_selection import train_test_split
+    scaler = StandardScaler().fit(df)
+    data_scaled = scaler.transform(df)
+    predict = model.predict(data_scaled)
+    putInTree(args.input, predict)
