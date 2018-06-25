@@ -17,8 +17,19 @@ parser.add_argument('--vars', '-v', nargs='+', action='store',
                     dest='vars', default=['Q2V1', 'Q2V2'],
                     help='variables to input to network'
                     )
+parser.add_argument('--njet', '-N', action='store_true',
+                    dest='njet', default=False,
+                    help='run on DY + n-jets'
+                    )
 args = parser.parse_args()
 input_length = len(args.vars)
+
+def getWeight(xs, fname):
+  from ROOT import TFile
+  lumi = 35900.
+  fin = TFile('input_files/'+fname, 'r')
+  nevnts = fin.Get('nevents').GetBinContent(2)
+  return (xs*lumi)/nevnts
 
 cross_sections = {
   0: 1.42383,
@@ -26,7 +37,7 @@ cross_sections = {
   2: 0.46762,
   3: 0.48084,
   4: 0.39415,
-  5: 1.0,
+  'VBF125': getWeight(3.782*0.0627, 'VBFHtoTauTau125_svFit_MELA.root'),
 }
 
 import h5py
@@ -72,7 +83,8 @@ def massage_data(vars, fname, sample_type):
   ifile.close()
 
   sig_cuts = (df[vars[0]] > -100) & (df['pt_sv'] > 100) & (df['njets'] >= 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)
-  bkg_cuts = sig_cuts & (df['numGenJets'] == 2)
+  if not args.njet:
+    bkg_cuts = sig_cuts & (df['numGenJets'] == 2)
 
   if 'bkg' in sample_type:
     df = df[bkg_cuts]
