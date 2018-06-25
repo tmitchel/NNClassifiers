@@ -106,7 +106,10 @@ def massage_data(vars, fname, sample_type):
   if 'bkg' in sample_type:
     df = df[bkg_cuts]
     df['isSignal'] = np.zeros(len(df))
-    df['weight'] = np.array([cross_sections[i] for i in df['numGenJets']])
+    if args.njet:
+      df['weight'] = np.array([cross_sections[i] for i in df['numGenJets']])
+    else:
+      df['weight'] = np.ones(len(df))
 
     df_roc = df_roc[(df_roc['Dbkg_VBF'] > -100)]
     df_roc['isSignal'] = np.zeros(len(df_roc))
@@ -196,7 +199,6 @@ def putInTree(fname, discs):
   fout.cd()
   ntree = itree.CloneTree()
   adiscs = array('f', [0.])
-  Q2s = array('f', [0.])
   disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')
   j = 0
   for i in range(nentries):
