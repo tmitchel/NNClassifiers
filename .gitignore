@@ -1,1 +1,5 @@
-~/Documents/HTT_NN/simpleDY_NN/input_files/*
+***/*.pdf
+***/*.root
+***/*.h5
+pyenv
+.vscode
