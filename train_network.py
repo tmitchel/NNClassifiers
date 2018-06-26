@@ -9,7 +9,6 @@ from keras.models import Model
 from argparse import ArgumentParser
 from keras.layers import Input, Activation, Dense
 from keras.callbacks import ModelCheckpoint, EarlyStopping
-environ['KERAS_BACKEND'] = 'tensorflow'
 
 parser = ArgumentParser(
   description="Run neural network to separate Z->TT + 2 jets from VBF"
@@ -36,6 +35,8 @@ parser.add_argument('--model_name', '-m', action='store',
                     )                    
 args = parser.parse_args()
 input_length = len(args.vars)
+
+environ['KERAS_BACKEND'] = 'tensorflow'
 
 def getWeight(xs, fname):
   """Return SF for normalization of a given sample at lumi=35900 fb^-1"""
