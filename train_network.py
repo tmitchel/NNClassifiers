@@ -5,6 +5,7 @@ import pandas
 import numpy as np
 from os import environ
 from pprint import pprint
+environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Keras import
 from keras.models import Model
 from argparse import ArgumentParser
 from keras.layers import Input, Activation, Dense
@@ -35,8 +36,6 @@ parser.add_argument('--model_name', '-m', action='store',
                     )                    
 args = parser.parse_args()
 input_length = len(args.vars)
-
-environ['KERAS_BACKEND'] = 'tensorflow'
 
 def getWeight(xs, fname):
   """Return SF for normalization of a given sample at lumi=35900 fb^-1"""

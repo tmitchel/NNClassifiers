@@ -5,6 +5,7 @@ import sys
 import h5py
 import pandas
 from os import environ
+environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Keras import
 from keras.models import Model
 from argparse import ArgumentParser
 from keras.layers import Input, Activation, Dense
@@ -29,8 +30,6 @@ parser.add_argument('--model_name', '-m', action='store',
                     help='name of a trained model'
                     )
 args = parser.parse_args()
-
-environ['KERAS_BACKEND'] = 'tensorflow'
 
 ## this function needs serious refactoring
 def putInTree(fname, discs):
