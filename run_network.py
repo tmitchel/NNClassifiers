@@ -39,7 +39,7 @@ def putInTree(fname, discs):
   fin = TFile('input_files/'+fname+'.root', 'update')
   itree = fin.Get('tt_tree')
   nentries = itree.GetEntries()
-  fout = TFile('input_files/'+fname+'_NN.root', 'recreate')  ## make new file for output
+  fout = TFile('output_files/'+fname+'_NN.root', 'recreate')  ## make new file for output
   fout.cd()
   ntree = itree.CloneTree()  ## copy all branches from old tree
   adiscs = array('f', [0.])
