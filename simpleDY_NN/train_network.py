@@ -30,6 +30,10 @@ parser.add_argument('--njet', '-N', action='store_true',
                     dest='njet', default=False,
                     help='run on DY + n-jets'
                     )
+parser.add_argument('--model_name', '-m', action='store',
+                    dest='model_name', default=None,
+                    help='name of a trained model'
+                    )                    
 args = parser.parse_args()
 input_length = len(args.vars)
 
@@ -63,10 +67,13 @@ def build_nn(nhid):
   # early stopping callback
   early_stopping = EarlyStopping(monitor='val_loss', patience=10)
 
-  if args.njet:
-    model_name = 'NN_njet_model.hdf5'
+  if args.model_name != None:
+    model_name = args.model_name
   else:
-    model_name = 'NN_2jet_model.hdf5'
+    if args.njet:
+      model_name = 'NN_njet_model.hdf5'
+    else:
+      model_name = 'NN_2jet_model.hdf5'
 
   # model checkpoint callback
   model_checkpoint = ModelCheckpoint(model_name, monitor='val_loss',
