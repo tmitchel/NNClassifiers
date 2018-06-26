@@ -137,7 +137,7 @@ def massage_data(vars, fname, sample_type):
   df = df.drop(selection_vars, axis=1)
   return df, df_roc
 
-def build_plots(history, other=None):
+def build_plots(history, label_test, other=None):
   """ do whatever plotting is needed """
   import  matplotlib.pyplot  as plt
 
@@ -146,7 +146,7 @@ def build_plots(history, other=None):
   # Plot ROC
   label_predict = model.predict(data_test)
   from sklearn.metrics import roc_curve, auc
-  fpr, tpr, thresholds = roc_curve(label_test, label_predict)
+  fpr, tpr, thresholds = roc_curve(label_test[:,0], label_predict[:,0])
   roc_auc = auc(fpr, tpr)
   plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
   plt.plot(tpr, fpr, lw=2, color='cyan', label='NN auc = %.3f' % (roc_auc))
@@ -202,7 +202,7 @@ def MELA_ROC(sig, bkg):
   dataset = all_data.values
   data = dataset[:,0:1]  ## read Dbkg_VBF for all events
   labels = dataset[:,-1]  ## read labels for all events
-  fpr, tpr, thresholds = roc_curve(labels, data)
+  fpr, tpr, thresholds = roc_curve(labels, data[:,0])
   roc_auc = auc(fpr, tpr)  ## calculate Area Under Curve
   return fpr, tpr, thresholds, roc_auc
 
@@ -238,4 +238,4 @@ if __name__ == "__main__":
 
   if args.verbose:
     ## produce a ROC curve and other plots
-    build_plots(history, MELA_ROC(mela_sig, mela_bkg))
+    build_plots(history, label_test, MELA_ROC(mela_sig, mela_bkg))
