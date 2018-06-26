@@ -99,15 +99,26 @@ def massage_data(vars, fname, sample_type):
 
   print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
-  slicer = tuple(vars) + ("numGenJets", "Dbkg_VBF", "njets", "pt_sv", "jeta_1", "jeta_2")  ## add variables for event selection
+
+  selection_vars = ['Dbkg_VBF', "numGenJets", "njets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
+    "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
+    "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1"]
+  
+  slicer = tuple(vars) + tuple(selection_vars)  ## add variables for event selection
   branches = ifile["tt_tree"][slicer]
   df_roc = pandas.DataFrame(branches, columns=['Dbkg_VBF'])  ## DataFrame used for MELA ROC curve
   df = pandas.DataFrame(branches, columns=slicer)  ## DataFrame holding NN input
   ifile.close()
 
   ## define event selection
-  sig_cuts = (df[vars[0]] > -100) & (df['pt_sv'] > 100) & (df['njets'] >= 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)
-  if not args.njet:
+  sig_cuts = (df[vars[0]] > -100) & (df['pt_sv'] > 100) & (df['njets'] >= 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)  & (df['againstElectronVLooseMVA6_1'] > 0.5) \
+    & (df['againstElectronVLooseMVA6_2'] > 0.5) & (df['againstMuonLoose3_1'] < 0.5) & (df['againstMuonLoose3_2'] < 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
+    & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) & (df['extraelec_veto'] < 0.5) & (df['extramuon_veto'] < 0.5) \
+    & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) )  
+
+  if args.njet:
+    bkg_cuts = sig_cuts
+  else:
     bkg_cuts = sig_cuts & (df['numGenJets'] == 2)
 
   if 'bkg' in sample_type:
@@ -143,7 +154,7 @@ def massage_data(vars, fname, sample_type):
     df_roc['isSignal'] = np.ones(len(df_roc))
 
   ## drop event selection branches from NN input
-  df = df.drop(['numGenJets', 'Dbkg_VBF', 'njets', 'pt_sv', 'jeta_1', 'jeta_2'], axis=1)
+  df = df.drop(selection_vars, axis=1)
   return df, df_roc
 
 def final_formatting(data, labels):
@@ -172,6 +183,45 @@ def MELA_ROC(sig, bkg):
   fpr, tpr, thresholds = roc_curve(labels, data)
   roc_auc = auc(fpr, tpr)  ## calculate Area Under Curve
   return fpr, tpr, thresholds, roc_auc
+
+## this function needs serious refactoring
+def putInTree(fname, discs):
+  """Function to write a new file copying old TTree and adding NN discriminant"""
+  from ROOT import TFile
+  from array import array
+  fin = TFile('input_files/'+fname+'.root', 'update')
+  itree = fin.Get('tt_tree')
+  nentries = itree.GetEntries()
+  fout = TFile('input_files/'+fname+'_NN.root', 'recreate')  ## make new file for output
+  fout.cd()
+  ntree = itree.CloneTree()  ## copy all branches from old tree
+  adiscs = array('f', [0.])
+  disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')  ## make a new branch to store the disc
+  j = 0
+  for i in range(nentries):
+    itree.GetEntry(i)
+
+    ## verbose way to do selection, but this step takes a long time so hopefully this will filter out bad events quicker
+    if itree.GetLeaf('Q2V1').GetValue() == -100:
+      adiscs[0] = -1
+    elif itree.GetLeaf('pt_sv').GetValue() < 100:
+      adiscs[0] = -1
+    elif itree.GetLeaf('njets').GetValue() < 2:
+      adiscs[0] = -1
+    elif 'VBF' not in fname and itree.GetLeaf('numGenJets').GetValue() != 2:
+      adiscs[0] = -1
+    elif abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) > 2.5:
+      adiscs[0] = -1
+    else:  ## passes event selection
+      adiscs[0] = discs[j][0]
+      j += 1
+
+    fout.cd()
+    disc_branch.Fill()
+  fin.Close()
+  fout.cd()
+  ntree.Write()
+  print 'in tree'
 
 def build_plots(history, other=None):
   """ do whatever plotting is needed """
@@ -215,49 +265,10 @@ def build_plots(history, other=None):
   ax.set_ylabel('acc')
   plt.show()
 
-## this function needs serious refactoring
-def putInTree(fname, discs):
-  """Function to write a new file copying old TTree and adding NN discriminant"""
-  from ROOT import TFile, TTree, TBranch
-  from array import array
-  fin = TFile('input_files/'+fname+'.root', 'update')
-  itree = fin.Get('tt_tree')
-  nentries = itree.GetEntries()
-  fout = TFile('input_files/'+fname+'_NN.root', 'recreate')  ## make new file for output
-  fout.cd()
-  ntree = itree.CloneTree()  ## copy all branches from old tree
-  adiscs = array('f', [0.])
-  disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')  ## make a new branch to store the disc
-  j = 0
-  for i in range(nentries):
-    itree.GetEntry(i)
-
-    ## verbose way to do selection, but this step takes a long time so hopefully this will filter out bad events quicker
-    if itree.GetLeaf('Q2V1').GetValue() == -100:
-      adiscs[0] = -1
-    elif itree.GetLeaf('pt_sv').GetValue() < 100:
-      adiscs[0] = -1
-    elif itree.GetLeaf('njets').GetValue() < 2:
-      adiscs[0] = -1
-    elif 'VBF' not in fname and itree.GetLeaf('numGenJets').GetValue() != 2:
-      adiscs[0] = -1
-    elif abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) > 2.5:
-      adiscs[0] = -1
-    else:  ## passes event selection
-      adiscs[0] = discs[j][0]
-      j += 1
-
-    fout.cd()
-    disc_branch.Fill()
-  fin.Close()
-  fout.cd()
-  ntree.Write()
-  print 'in tree'
-
 if __name__ == "__main__":
   ## format the data
   sig, mela_sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
-  bkg, mela_bkg = massage_data(args.vars, "input_files/DYJets2_svFit_MELA.h5", "bkg")
+  bkg, mela_bkg = massage_data(args.vars, "input_files/DY.h5", "bkg")
   all_data = pandas.concat([sig, bkg])
   dataset = all_data.values
   data = dataset[:,0:input_length]  ## get numpy array with all input variables
