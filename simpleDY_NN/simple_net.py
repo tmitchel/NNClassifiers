@@ -43,13 +43,15 @@ def getWeight(xs, fname):
   nevnts = fin.Get('nevents').GetBinContent(2)
   return (xs*lumi)/nevnts
 
+
+VBFweight = getWeight(3.782*0.0627, 'VBFHtoTauTau125_svFit_MELA.root')
 cross_sections = {
   0: 1.42383,
   1: 0.45846,
   2: 0.46762,
   3: 0.48084,
   4: 0.39415,
-  'VBF125': getWeight(3.782*0.0627, 'VBFHtoTauTau125_svFit_MELA.root'),
+  'VBF125': VBFweight,
 }
 
 import os
@@ -116,7 +118,10 @@ def massage_data(vars, fname, sample_type):
   else:
     df = df[sig_cuts]
     df['isSignal'] = np.ones(len(df))
-    df['weight'] = np.ones(len(df))
+    if args.njet:
+      df['weight'] = np.array([cross_sections['VBF125'] for i in range(len(df))])
+    else:
+      df['weight'] = np.ones(len(df))
 
     df_roc = df_roc[(df_roc['Dbkg_VBF'] > -100)]
     df_roc['isSignal'] = np.ones(len(df_roc))
@@ -204,12 +209,28 @@ def putInTree(fname, discs):
   for i in range(nentries):
     itree.GetEntry(i)
 
-    if itree.GetLeaf('Q2V1').GetValue() != -100 and itree.GetLeaf('pt_sv').GetValue() > 100 and itree.GetLeaf('njets').GetValue() >= 2 \
-    and abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) > 2.5 and ('VBF' in fname or itree.GetLeaf('numGenJets').GetValue() == 2):
+    ## verbose way to type this, but this step takes a long time so hopefully this will filter out bad events quicker
+    if itree.GetLeaf('Q2V1').GetValue() == -100:
+      adiscs[0] = -1
+    elif itree.GetLeaf('pt_sv').GetValue() < 100:
+      adiscs[0] = -1
+    elif itree.GetLeaf('njets').GetValue() < 2:
+      adiscs[0] = -1
+    elif 'VBF' not in fname and itree.GetLeaf('numGenJets').GetValue() != 2:
+      adiscs[0] = -1
+    elif abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) > 2.5:
+      adiscs[0] = -1
+    else:
       adiscs[0] = discs[j][0]
       j += 1
-    else:
-      adiscs[0] = -100
+
+    # if itree.GetLeaf('Q2V1').GetValue() != -100 and itree.GetLeaf('pt_sv').GetValue() > 100 and itree.GetLeaf('njets').GetValue() >= 2 \
+    # and abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) > 2.5 and ('VBF' in fname or itree.GetLeaf('numGenJets').GetValue() == 2):
+    #   adiscs[0] = discs[j][0]
+    #   j += 1
+    # else:
+    #   adiscs[0] = -100
+
     fout.cd()
     disc_branch.Fill()
 
@@ -267,5 +288,5 @@ if __name__ == "__main__":
     from sklearn.model_selection import train_test_split
     scaler = StandardScaler().fit(df)
     data_scaled = scaler.transform(df)
-    predict = model.predict(data_scaled)
+    predict = model.predict(data_scaled, verbose=args.verbose)
     putInTree(args.input, predict)
