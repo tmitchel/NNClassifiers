@@ -59,6 +59,16 @@ def putInTree(fname, discs):
       adiscs[0] = -1
     elif abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) > 2.5:
       adiscs[0] = -1
+    elif itree.GetLeaf('againstElectronVLooseMVA6_1').GetValue() < 0.5 or itree.GetLeaf('againstElectronVLooseMVA6_2').GetValue() < 0.5:
+      adiscs[0] = -1
+    elif itree.GetLeaf('againstMuonLoose3_1').GetValue() > 0.5 or itree.GetLeaf('againstMuonLoose3_2').GetValue() > 0.5:
+      adiscs[0] = -1
+    elif itree.GetLeaf('byTightIsolationMVArun2v1DBoldDMwLT_1').GetValue() < 0.5 or itree.GetLeaf('byTightIsolationMVArun2v1DBoldDMwLT_2').GetValue() < 0.5:
+      adiscs[0] = -1
+    elif itree.GetLeaf('extraelec_veto').GetValue() > 0.5 or itree.GetLeaf('extramuon_veto').GetValue() > 0.5:
+      adiscs[0] = -1
+    elif itree.GetLeaf('byLooseIsolationMVArun2v1DBoldDMwLT_1').GetValue() < 0.5 and itree.GetLeaf('byLooseIsolationMVArun2v1DBoldDMwLT_2').GetValue() < 0.5:
+      adiscs[0] = -1
     else:  ## passes event selection
       adiscs[0] = discs[j][0]
       j += 1
