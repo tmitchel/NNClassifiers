@@ -76,6 +76,8 @@ def build_nn(nhid):
     else:
       model_name = 'NN_2jet_model.hdf5'
 
+  model_name = 'models/' + model_name
+
   # model checkpoint callback
   model_checkpoint = ModelCheckpoint(model_name, monitor='val_loss',
                       verbose=0, save_best_only=True,
@@ -168,7 +170,7 @@ def build_plots(history, label_test, other=None):
   plt.title('receiver operating curve')
   plt.legend(loc="upper left")
   #plt.show()
-  plt.savefig('layer1_node{}_NN.pdf'.format(args.nhid))
+  plt.savefig('plots/layer1_node{}_NN.pdf'.format(args.nhid))
 
   # plot loss vs epoch
   ax = plt.subplot(2, 1, 1)

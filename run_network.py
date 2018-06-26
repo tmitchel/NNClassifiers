@@ -82,6 +82,8 @@ if __name__ == "__main__":
     else:
       model_name = 'NN_2jet_model.hdf5'
   
+  model_name = 'models/' + model_name
+
   ## load the NN weights
   if not os.path.exists(model_name):
     print "Can't find trained model: {}".format(model_name)
