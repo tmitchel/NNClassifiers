@@ -106,8 +106,8 @@ def massage_data(vars, fname, sample_type):
   ifile.close()
 
   ## define event selection
-  sig_cuts = (df[vars[0]] > -100) & (df['pt_sv'] > 100) & (df['njets'] >= 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)  & (df['againstElectronVLooseMVA6_1'] > 0.5) \
-    & (df['againstElectronVLooseMVA6_2'] > 0.5) & (df['againstMuonLoose3_1'] < 0.5) & (df['againstMuonLoose3_2'] < 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
+  sig_cuts = (df['Dbkg_VBF'] > -100) & (df['pt_sv'] > 100) & (df['njets'] >= 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)  & (df['againstElectronVLooseMVA6_1'] > 0.5) \
+    & (df['againstElectronVLooseMVA6_2'] > 0.5) & (df['againstMuonLoose3_1'] > 0.5) & (df['againstMuonLoose3_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
     & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) & (df['extraelec_veto'] < 0.5) & (df['extramuon_veto'] < 0.5) \
     & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) )  
 
@@ -126,7 +126,7 @@ def massage_data(vars, fname, sample_type):
     df['weight'] = np.array([cross_sections[i] for i in df['numGenJets']])
 
     ## format bkg DataFrame for MELA ROC curve
-    df_roc = df_roc[(df_roc['Dbkg_VBF'] > -100)]
+    df_roc = df_roc[bkg_cuts]
     df_roc['isSignal'] = np.zeros(len(df_roc))
 
   else:
@@ -139,7 +139,7 @@ def massage_data(vars, fname, sample_type):
     df['weight'] = np.array([cross_sections['VBF125'] for i in range(len(df))])
 
     ## format bkg DataFrame for MELA ROC curve
-    df_roc = df_roc[(df_roc['Dbkg_VBF'] > -100)]
+    df_roc = df_roc[sig_cuts]
     df_roc['isSignal'] = np.ones(len(df_roc))
 
   ## drop event selection branches from NN input

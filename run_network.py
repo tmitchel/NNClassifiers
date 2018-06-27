@@ -29,7 +29,16 @@ parser.add_argument('--model_name', '-m', action='store',
                     dest='model_name', default=None,
                     help='name of a trained model'
                     )
+parser.add_argument('--vars', '-v', nargs='+', action='store',
+                    dest='vars', default=['Q2V1', 'Q2V2'],
+                    help='variables to input to network'
+                    )
+parser.add_argument('--nhid', '-n', action='store',
+                    dest='nhid', default=5, type=int,
+                    help='number of hidden nodes in network'
+                    )
 args = parser.parse_args()
+input_length = len(args.vars)
 
 ## this function needs serious refactoring
 def putInTree(fname, discs):
@@ -48,6 +57,14 @@ def putInTree(fname, discs):
   for i in range(nentries):
     itree.GetEntry(i)
 
+    if i % 10000 == 0:
+      print '{} events of out {} have been processed\r'.format(i, nentries)
+
+    # (df['njets'] >= 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)  & (df['againstElectronVLooseMVA6_1'] > 0.5) \
+    # & (df['againstElectronVLooseMVA6_2'] > 0.5) & (df['againstMuonLoose3_1'] < 0.5) & (df['againstMuonLoose3_2'] < 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
+    # & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) & (df['extraelec_veto'] < 0.5) & (df['extramuon_veto'] < 0.5) \
+    # & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) )  
+
     ## verbose way to do selection, but this step takes a long time so hopefully this will filter out bad events quicker
     if itree.GetLeaf('Q2V1').GetValue() == -100:
       adiscs[0] = -1
@@ -57,7 +74,7 @@ def putInTree(fname, discs):
       adiscs[0] = -1
     elif 'VBF' not in fname and itree.GetLeaf('numGenJets').GetValue() != 2:
       adiscs[0] = -1
-    elif abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) > 2.5:
+    elif abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) < 2.5:
       adiscs[0] = -1
     elif itree.GetLeaf('againstElectronVLooseMVA6_1').GetValue() < 0.5 or itree.GetLeaf('againstElectronVLooseMVA6_2').GetValue() < 0.5:
       adiscs[0] = -1
@@ -92,7 +109,6 @@ if __name__ == "__main__":
       model_name = 'NN_2jet_model.hdf5'
   
   model_name = 'models/' + model_name
-
   ## load the NN weights
   if not os.path.exists(model_name):
     print "Can't find trained model: {}".format(model_name)
@@ -101,7 +117,7 @@ if __name__ == "__main__":
 
   print 'Building the network...'
   inputs = Input(shape = (input_length,), name = 'input')
-  hidden = Dense(nhid, name = 'hidden', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
+  hidden = Dense(args.nhid, name = 'hidden', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
   outputs = Dense(1, name = 'output', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
   model = Model(inputs = inputs, outputs = outputs)
   model.load_weights(model_name)

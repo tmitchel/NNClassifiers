@@ -17,7 +17,7 @@ def getData(fname, isSignal):
     df = df[(df['Dbkg_VBF'] > -100) ]
 
     sig_cuts = (df['pt_sv'] > 100) & (df['njets'] >= 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5) & (df['againstElectronVLooseMVA6_1'] > 0.5) & (df['againstElectronVLooseMVA6_2'] > 0.5) \
-    & (df['againstMuonLoose3_1'] < 0.5) & (df['againstMuonLoose3_2'] < 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) \
+    & (df['againstMuonLoose3_1'] > 0.5) & (df['againstMuonLoose3_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) \
     & (df['extraelec_veto'] < 0.5) & (df['extramuon_veto'] < 0.5) & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) )
     if not isSignal:
       bkg_cuts = sig_cuts & (df['numGenJets'] == 2)
@@ -29,7 +29,7 @@ def getData(fname, isSignal):
     return df
 
 sig = getData('VBFHtoTauTau125_svFit_MELA.h5', True)
-bkg = getData('DYJets2_svFit_MELA.h5', False)
+bkg = getData('DY.h5', False)
 print 'sig', len(sig), 'bkg', len(bkg)
 all_data = pandas.concat([sig, bkg])
 dataset = all_data.values
@@ -37,11 +37,16 @@ data = dataset[:,0:1]
 labels = dataset[:,-1]
 fpr, tpr, thresholds = roc_curve(labels, data)
 
-for i in thresholds:
+for i in tpr:
   if i < 0.851 and i > 0.849:
     print i
 
-ind = np.where(thresholds==0.8502053618431091)
+ind = np.where(thresholds==0.8498852849006653)
+print fpr[ind[0]], tpr[ind[0]]
+
+print
+
+ind = np.where(tpr==0.8499769903359411)
 print fpr[ind[0]], tpr[ind[0]]
 
 roc_auc = auc(fpr, tpr)
