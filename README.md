@@ -49,9 +49,9 @@ The script run_network.py is used to process an input file using a pre-trained n
 
 An example usage is shown below
 
-    python run_network.py -i DY -N
+    python run_network.py -i DY -l my_network.json
 
-This will run the default network trained to separate H->TT from DY+N-Jets on an input file named DY.h5. The output file will be output_files/DY_NN.root
+This will load the model parameters (including the name) from my_network.json and run the trained network on an input file named DY.h5. The output file will be output_files/DY_NN.root
 
 More command-line options exist for convenince. They can be seen with 
 
