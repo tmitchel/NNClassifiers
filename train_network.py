@@ -1,18 +1,8 @@
 #!/usr/bin/env python
 
-import h5py
-import pandas
-import numpy as np
-from os import environ
-from pprint import pprint
-environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Keras import
-from keras.models import Model
 from argparse import ArgumentParser
-from keras.layers import Input, Activation, Dense
-from keras.callbacks import ModelCheckpoint, EarlyStopping
-
 parser = ArgumentParser(
-  description="Run neural network to separate Z->TT + 2 jets from VBF"
+  description = "Train two-layer neural network to separate Drell-Yan + jets from VBF Higgs to tau-tau"
   )
 parser.add_argument('--verbose', action='store_true',
                     dest='verbose', default=False,
@@ -36,6 +26,16 @@ parser.add_argument('--model_name', '-m', action='store',
                     )                    
 args = parser.parse_args()
 input_length = len(args.vars)
+
+import h5py
+import pandas
+import numpy as np
+from os import environ
+from pprint import pprint
+environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Keras import
+from keras.models import Model
+from keras.layers import Input, Activation, Dense
+from keras.callbacks import ModelCheckpoint, EarlyStopping
 
 def getWeight(xs, fname):
   """Return SF for normalization of a given sample at lumi=35900 fb^-1"""
@@ -97,7 +97,7 @@ def massage_data(vars, fname, sample_type):
 
   selection_vars = ['Dbkg_VBF', "numGenJets", "njets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
     "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
-    "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1"]
+    "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
   
   slicer = tuple(vars) + tuple(selection_vars)  ## add variables for event selection
   branches = ifile["tt_tree"][slicer]
@@ -106,10 +106,15 @@ def massage_data(vars, fname, sample_type):
   ifile.close()
 
   ## define event selection
-  sig_cuts = (df['Dbkg_VBF'] > -100) & (df['pt_sv'] > 100) & (df['njets'] >= 2) & (abs(df['jeta_1'] - df['jeta_2']) > 2.5)  & (df['againstElectronVLooseMVA6_1'] > 0.5) \
+  mela_cuts = (df['Dbkg_VBF'] > -100)
+  sig_cuts = (df['Q2V1'] > -100)
+  evt_cuts = (df['pt_sv'] > 100) & (df['mjj'] > 300) & (df['againstElectronVLooseMVA6_1'] > 0.5) \
     & (df['againstElectronVLooseMVA6_2'] > 0.5) & (df['againstMuonLoose3_1'] > 0.5) & (df['againstMuonLoose3_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
     & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) & (df['extraelec_veto'] < 0.5) & (df['extramuon_veto'] < 0.5) \
-    & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) )  
+    & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) )  
+
+  sig_cuts = sig_cuts & evt_cuts
+  mela_cuts = mela_cuts & evt_cuts
 
   if 'bkg' in sample_type:
 
@@ -248,3 +253,4 @@ if __name__ == "__main__":
   if args.verbose:
     ## produce a ROC curve and other plots
     build_plots(history, label_test, MELA_ROC(mela_sig, mela_bkg))
+
