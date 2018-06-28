@@ -23,7 +23,12 @@ parser.add_argument('--njet', '-N', action='store_true',
 parser.add_argument('--model_name', '-m', action='store',
                     dest='model_name', default=None,
                     help='name of a trained model'
-                    )                    
+                    )
+parser.add_argument('--save_json', '-s', action='store_false',
+                    dest='save_json', default=True,
+                    help="don't store NN settings to json"
+                    )
+
 args = parser.parse_args()
 input_length = len(args.vars)
 
@@ -36,6 +41,24 @@ environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Kera
 from keras.models import Model
 from keras.layers import Input, Activation, Dense
 from keras.callbacks import ModelCheckpoint, EarlyStopping
+
+def create_json(model_name):
+  import json
+
+  if args.model_name != None:
+    fname = args.model_name + '.json'
+  else:
+    fname = 'model_store.json'
+
+  with open(fname, 'w') as fout:
+    json.dump(
+      {
+        'model_name': model_name,
+        'variables': args.vars,
+        'nhidden': args.nhid,
+        'njet': args.njet
+      }, fout
+    )
 
 def getWeight(xs, fname):
   """Return SF for normalization of a given sample at lumi=35900 fb^-1"""
@@ -68,7 +91,7 @@ def build_nn(nhid):
   early_stopping = EarlyStopping(monitor='val_loss', patience=10)
 
   if args.model_name != None:
-    model_name = args.model_name
+    model_name = args.model_name + '.hdf5'
   else:
     if args.njet:
       model_name = 'NN_njet_model.hdf5'
@@ -154,12 +177,12 @@ def massage_data(vars, fname, sample_type):
 def build_plots(history, label_test, other=None):
   """ do whatever plotting is needed """
   import  matplotlib.pyplot  as plt
+  from sklearn.metrics import roc_curve, auc
 
   plt.figure(figsize=(15,10))
 
   # Plot ROC
   label_predict = model.predict(data_test)
-  from sklearn.metrics import roc_curve, auc
   fpr, tpr, thresholds = roc_curve(label_test[:,0], label_predict[:,0])
   roc_auc = auc(fpr, tpr)
   plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='k', label='random chance')
@@ -254,3 +277,12 @@ if __name__ == "__main__":
     ## produce a ROC curve and other plots
     build_plots(history, label_test, MELA_ROC(mela_sig, mela_bkg))
 
+  if args.save_json:
+    if args.model_name != None:
+      model_name = args.model_name
+    elif args.njet:
+      model_name = 'NN_njet_model'
+    else:
+      model_name = 'NN_2jet_model'
+
+    create_json(model_name)
