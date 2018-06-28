@@ -30,7 +30,7 @@ parser.add_argument('--save_json', '-s', action='store_false',
                     )
 
 args = parser.parse_args()
-input_length = len(args.vars)
+# input_length = len(args.vars)
 
 import h5py
 import pandas
@@ -50,7 +50,7 @@ def create_json(model_name):
   else:
     fname = 'model_store.json'
 
-  with open(fname, 'w') as fout:
+  with open('model_params/'+fname, 'w') as fout:
     json.dump(
       {
         'model_name': model_name,
@@ -121,12 +121,17 @@ def massage_data(vars, fname, sample_type):
   selection_vars = ['Dbkg_VBF', "numGenJets", "njets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
     "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
     "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
+
+  selection_vars = [var for var in selection_vars if var not in vars]
   
   slicer = tuple(vars) + tuple(selection_vars)  ## add variables for event selection
   branches = ifile["tt_tree"][slicer]
   df_roc = pandas.DataFrame(branches, columns=['Dbkg_VBF'])  ## DataFrame used for MELA ROC curve
   df = pandas.DataFrame(branches, columns=slicer)  ## DataFrame holding NN input
   ifile.close()
+
+  ## additional variables for selection that must be constructed can be added here
+  ## ...
 
   ## define event selection
   mela_cuts = (df['Dbkg_VBF'] > -100)
@@ -170,6 +175,9 @@ def massage_data(vars, fname, sample_type):
     df_roc = df_roc[sig_cuts]
     df_roc['isSignal'] = np.ones(len(df_roc))
 
+  ## additional input variables that must be constructed can be added here
+  df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))  ## add to beginning because weight/isSignal must be last
+
   ## drop event selection branches from NN input
   df = df.drop(selection_vars, axis=1)
   return df, df_roc
@@ -197,7 +205,11 @@ def build_plots(history, label_test, other=None):
   plt.title('receiver operating curve')
   plt.legend(loc="upper left")
   #plt.show()
-  plt.savefig('plots/layer1_node{}_NN.pdf'.format(args.nhid))
+  if args.njet:
+    ext = 'njet'
+    plt.savefig('plots/layer1_node{}_njet_NN.pdf'.format(args.nhid))
+  else:
+    plt.savefig('plots/layer1_node{}_2jet_NN.pdf'.format(args.nhid))
 
   # plot loss vs epoch
   ax = plt.subplot(2, 1, 1)
@@ -246,6 +258,7 @@ def MELA_ROC(sig, bkg):
 if __name__ == "__main__":
   ## format the data
   sig, mela_sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
+  input_length = sig.shape[1] - 2  ## get shape and remove weight & isSignal
   bkg, mela_bkg = massage_data(args.vars, "input_files/DY.h5", "bkg")
   all_data = pandas.concat([sig, bkg])
   dataset = all_data.values

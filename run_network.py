@@ -127,7 +127,7 @@ def normalize(df):
 if __name__ == "__main__":
 
   with open(args.load_json, 'r') as fname:
-    params = json.load(fname)
+    params = json.load('model_params/'+fname)
 
   model_name = params['model_name']
   variables  = params['variables']
