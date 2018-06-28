@@ -8,32 +8,20 @@ parser.add_argument('--verbose', action='store_true',
                     dest='verbose', default=False,
                     help='run in verbose mode'
                     )
-parser.add_argument('--njet', '-N', action='store_true',
-                    dest='njet', default=False,
-                    help='run on DY + n-jets'
-                    )
 parser.add_argument('--input', '-i', action='store',
                     dest='input', default=None, type=str,
                     help='File with events to input to NN'
                     )
-parser.add_argument('--model_name', '-m', action='store',
-                    dest='model_name', default=None,
-                    help='name of a trained model'
-                    )
-parser.add_argument('--vars', '-v', nargs='+', action='store',
-                    dest='vars', default=['Q2V1', 'Q2V2'],
-                    help='variables to input to network'
-                    )
-parser.add_argument('--nhid', '-n', action='store',
-                    dest='nhid', default=5, type=int,
-                    help='number of hidden nodes in network'
+parser.add_argument('--load_json', '-l', action='store',
+                    dest='load_json', default='model_store.json',
+                    help='name of json file to load model parameters'
                     )
 args = parser.parse_args()
-input_length = len(args.vars)
 
 import os
 import sys
 import h5py
+import json
 import pandas
 from os import environ
 environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Keras import
@@ -65,7 +53,7 @@ def putInTree(fname, discs):
       adiscs[0] = -1
     elif itree.GetLeaf('pt_sv').GetValue() < 100:
       adiscs[0] = -1
-    elif 'VBF' not in fname and itree.GetLeaf('numGenJets').GetValue() != 2 and not args.njet:
+    elif 'VBF' not in fname and itree.GetLeaf('numGenJets').GetValue() != 2 and not njet:
       adiscs[0] = -1
     # elif abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) < 2.5:
     elif itree.GetLeaf('mjj').GetValue() < 300:
@@ -94,7 +82,7 @@ def putInTree(fname, discs):
 def build_network(model_name):
   print 'Building the network...'
   inputs = Input(shape = (input_length,), name = 'input')
-  hidden = Dense(args.nhid, name = 'hidden', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
+  hidden = Dense(nhid, name = 'hidden', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
   outputs = Dense(1, name = 'output', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
   model = Model(inputs = inputs, outputs = outputs)
   model.load_weights(model_name)
@@ -110,18 +98,18 @@ def create_dataframe():
     "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
     "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
 
-  slicer = tuple(args.vars) + tuple(selection_vars) ## add event selection variables
+  slicer = tuple(variables) + tuple(selection_vars) ## add event selection variables
   branches = ifile["tt_tree"][slicer]
   df = pandas.DataFrame(branches, columns=slicer)
   ifile.close()
 
   ## define event selection
-  cuts = (df[args.vars[0]] > -100) & (df['pt_sv'] > 100) & (df['mjj'] > 300) & (df['againstElectronVLooseMVA6_1'] > 0.5) \
+  cuts = (df[variables[0]] > -100) & (df['pt_sv'] > 100) & (df['mjj'] > 300) & (df['againstElectronVLooseMVA6_1'] > 0.5) \
     & (df['againstElectronVLooseMVA6_2'] > 0.5) & (df['againstMuonLoose3_1'] > 0.5) & (df['againstMuonLoose3_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
     & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) & (df['extraelec_veto'] < 0.5) & (df['extramuon_veto'] < 0.5) \
     & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) )
 
-  if not args.njet and 'VBF' not in args.input:
+  if not njet and 'VBF' not in args.input:
     cuts = cuts & (df['numGenJets'] == 2)
 
   df = df[cuts]  ## apply event selection
@@ -138,16 +126,17 @@ def normalize(df):
 
 if __name__ == "__main__":
 
-  ## make sure the requested model exists
-  if args.model_name != None:
-    model_name = args.model_name
-  else:
-    if args.njet:
-      model_name = 'NN_njet_model.hdf5'
-    else:
-      model_name = 'NN_2jet_model.hdf5'
-  
-  model_name = 'models/' + model_name
+  with open(args.load_json, 'r') as fname:
+    params = json.load(fname)
+
+  model_name = params['model_name']
+  variables  = params['variables']
+  njet       = params['njet']
+  nhid       = params['nhidden']
+  input_length = len(variables)
+
+ 
+  model_name = 'models/' + model_name + '.hdf5'
   ## load the NN weights
   if not os.path.exists(model_name):
     print "Can't find trained model: {}".format(model_name)
