@@ -24,8 +24,8 @@ parser.add_argument('--model_name', '-m', action='store',
                     dest='model_name', default=None,
                     help='name of a trained model'
                     )
-parser.add_argument('--save_json', '-s', action='store_false',
-                    dest='save_json', default=True,
+parser.add_argument('--dont_save_json', '-d', action='store_true',
+                    dest='dont_save_json', default=False,
                     help="don't store NN settings to json"
                     )
 
@@ -118,7 +118,7 @@ def massage_data(vars, fname, sample_type):
   print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
 
-  selection_vars = ['Dbkg_VBF', "numGenJets", "njets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
+  selection_vars = ['Dbkg_VBF', "njets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
     "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
     "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
 
@@ -149,14 +149,14 @@ def massage_data(vars, fname, sample_type):
     ## choose DY + 2-Jets or DY + N-Jets
     bkg_cuts = sig_cuts
     if not args.njet:
-      bkg_cuts = bkg_cuts & (df['numGenJets'] == 2)
+      bkg_cuts = bkg_cuts & (df['njets'] == 2)
 
     ## format background DataFrame for NN input
     df = df[bkg_cuts]
     df['isSignal'] = np.zeros(len(df))  ## put label in DataFrame (bkg=0)
 
     ## get cross section normalization
-    df['weight'] = np.array([cross_sections[i] for i in df['numGenJets']])
+    df['weight'] = np.array([cross_sections[i] for i in df['njets']])
 
     ## format bkg DataFrame for MELA ROC curve
     df_roc = df_roc[bkg_cuts]
@@ -204,12 +204,13 @@ def build_plots(history, label_test, other=None):
   plt.ylabel('false positive rate')
   plt.title('receiver operating curve')
   plt.legend(loc="upper left")
+  plt.savefig('plots/'+args.model_name+'.pdf')
   #plt.show()
-  if args.njet:
-    ext = 'njet'
-    plt.savefig('plots/layer1_node{}_njet_NN.pdf'.format(args.nhid))
-  else:
-    plt.savefig('plots/layer1_node{}_2jet_NN.pdf'.format(args.nhid))
+  # if args.njet:
+  #   ext = 'njet'
+  #   plt.savefig('plots/layer1_node{}_njet_NN.pdf'.format(args.nhid))
+  # else:
+  #   plt.savefig('plots/layer1_node{}_2jet_NN.pdf'.format(args.nhid))
 
   # plot loss vs epoch
   ax = plt.subplot(2, 1, 1)
@@ -268,7 +269,8 @@ if __name__ == "__main__":
   label_train_val, weights = label_train_val[:,0], label_train_val[:,1]  ## split into labels and weights
 
   ## if running DY + 2-Jets, set all weights to 1.0
-  weights = np.array([1. for i in range(len(label_train_val))])
+  if not args.njet:
+    weights = np.array([1. for i in range(len(label_train_val))])
 
   ## build the NN
   model, callbacks = build_nn(args.nhid)
@@ -290,7 +292,9 @@ if __name__ == "__main__":
     ## produce a ROC curve and other plots
     build_plots(history, label_test, MELA_ROC(mela_sig, mela_bkg))
 
-  if args.save_json:
+  if args.dont_save_json:
+    pass
+  else:
     if args.model_name != None:
       model_name = args.model_name
     elif args.njet:
