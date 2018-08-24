@@ -1,6 +1,5 @@
 #!/usr/bin bash
 
-pushd ..
 if [ ! -d "$pyenv" ]; then
   virtualenv pyenv # setup virtual enviroment
 fi
@@ -14,4 +13,3 @@ pip install tables
 pip install pandas
 pip install tensorflow
 pip install keras
-popd
