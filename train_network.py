@@ -118,7 +118,7 @@ def massage_data(vars, fname, sample_type):
   print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
 
-  selection_vars = ['Dbkg_VBF', "njets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
+  selection_vars = ['Dbkg_VBF', "njets", "numGenJets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
     "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
     "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
 
@@ -156,7 +156,7 @@ def massage_data(vars, fname, sample_type):
     df['isSignal'] = np.zeros(len(df))  ## put label in DataFrame (bkg=0)
 
     ## get cross section normalization
-    df['weight'] = np.array([cross_sections[i] for i in df['njets']])
+    df['weight'] = np.array([cross_sections[i] for i in df['numGenJets']])
 
     ## format bkg DataFrame for MELA ROC curve
     df_roc = df_roc[bkg_cuts]
@@ -176,7 +176,7 @@ def massage_data(vars, fname, sample_type):
     df_roc['isSignal'] = np.ones(len(df_roc))
 
   ## additional input variables that must be constructed can be added here
-  df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))  ## add to beginning because weight/isSignal must be last
+  #df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))  ## add to beginning because weight/isSignal must be last
 
   ## drop event selection branches from NN input
   df = df.drop(selection_vars, axis=1)
