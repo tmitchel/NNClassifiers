@@ -3,3 +3,6 @@
 ***/*.h5
 pyenv
 .vscode
+***/*.json
+***/*.hdf5
+.DS_Store
