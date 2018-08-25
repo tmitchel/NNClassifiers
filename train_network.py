@@ -62,7 +62,7 @@ def create_json(model_name):
 
 def getWeight(xs, fname):
   """Return SF for normalization of a given sample at lumi=35900 fb^-1"""
-  from ROOT import TFile
+  from ROOT import TFile, TLorentzVector
   lumi = 35900.
   fin = TFile('input_files/'+fname, 'r')
   nevnts = fin.Get('nevents').GetBinContent(2)
@@ -114,24 +114,36 @@ def build_nn(nhid):
 
 def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
+  from ROOT import TLorentzVector
 
   print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
 
-  selection_vars = ['Dbkg_VBF', "njets", "numGenJets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
-    "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
-    "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
+  selection_vars = ['Dbkg_VBF', 'pt_1', 'eta_1', 'phi_1', 'm_1', 'pt_2', 'eta_2', 'phi_2', 'm_2', 'met', 'metphi', 
+      'passEle25', 'filterEle25', 'matchEle25', 'decayModeFinding_2', 'iso_1', 'njets', 'mjj',
+      'againstMuonLoose3_2', 'againstElectronTightMVA6_2', 'byTightIsolationMVArun2v1DBoldDMwLT_2'
+      ]
+  # selection_vars = ['Dbkg_VBF', "njets", "numGenJets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
+    # "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
+    # "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
 
   selection_vars = [var for var in selection_vars if var not in vars]
   
   slicer = tuple(vars) + tuple(selection_vars)  ## add variables for event selection
-  branches = ifile["tt_tree"][slicer]
+  branches = ifile["etau_tree"][slicer]
   df_roc = pandas.DataFrame(branches, columns=['Dbkg_VBF'])  ## DataFrame used for MELA ROC curve
   df = pandas.DataFrame(branches, columns=slicer)  ## DataFrame holding NN input
   ifile.close()
 
   ## additional variables for selection that must be constructed can be added here
-  ## ...
+  met, ele, tau = TLorentzVector(), TLorentzVector(), TLorentzVector()
+  for i in range(len(df['pt_1'])):
+    met.SetPtEtaPhiM(df['met'][i] , 0.            , df['metphi'][i], 0.)
+    ele.SetPtEtaPhiM(df['pt_1'][i], df['eta_1'][i], df['phi_1'][i] , df['m_1'][i])
+    tau.SetPtEtaPhiM(df['pt_2'][i], df['eta_2'][i], df['phi_2'][i] , df['m_2'][i])
+    df['ptjj'][i] = (met+ele+tau).Pt()
+
+  selection_vars.append('ptjj')
 
   ## define event selection
   mela_cuts = (df['Dbkg_VBF'] > -100)
