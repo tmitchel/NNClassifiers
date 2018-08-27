@@ -135,21 +135,26 @@ def massage_data(vars, fname, sample_type):
   df = pandas.DataFrame(branches, columns=slicer)  ## DataFrame holding NN input
   ifile.close()
 
-  sum_pT = np.array([])
+  print 'Input data is now in the DataFrame'
+
+  sum_pT = np.empty(len(df['pt_1']))
   ## additional variables for selection that must be constructed can be added here
   met, ele, tau = TLorentzVector(), TLorentzVector(), TLorentzVector()
-  for i in range(len(df['pt_1'])):
+  for i in xrange(len(df['pt_1'])):
     met.SetPtEtaPhiM(df['met'][i] , 0.            , df['metphi'][i], 0.)
     ele.SetPtEtaPhiM(df['pt_1'][i], df['eta_1'][i], df['phi_1'][i] , df['m_1'][i])
     tau.SetPtEtaPhiM(df['pt_2'][i], df['eta_2'][i], df['phi_2'][i] , df['m_2'][i])
-    sum_pT.append((met+ele+tau).Pt())
+    sum_pT[i] = (met+ele+tau).Pt()
     
   pthjj = pandas.Series(sum_pT)
-
+  print 'Higss+jj pT constructed'
+  
   met_x = df['metphi'].apply(np.cos) + df['met']
   met_y = df['metphi'].apply(np.sin) + df['met']
   met_pT = (met_x*met_x + met_y*met_y).apply(np.sqrt)
   mt = ( (df['pt_1']+met_pT)*(df['pt_1']+met_pT) + (df['px_1']+met_x)*(df['px_1']+met_x) + (df['py_1']*met_y)*(df['py_1']*met_y) ).apply(np.sqrt)
+
+  print 'mt constructed'  
 
   ## define event selection
   mela_cuts = (df['Dbkg_VBF'] > -100)
@@ -157,6 +162,8 @@ def massage_data(vars, fname, sample_type):
   evt_cuts = (df['pt_1'] > 26) & (abs(df['eta_1']) < 2.1) & (df['passEle25'] > 0.5) & (df['filterEle25'] > 0.5) & (df['matchEle25'] > 0.5) & (df['decayModeFinding_2'] > 0.5) \
             & (abs(df['eta_1']) < 2.3) & (df['againstMuonLoose3_2'] > 0.5) & (df['againstElectronTightMVA6_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) \
             & (df['iso_1'] < 0.10) & (df['njets'] > 1) & (df['mjj'] > 300) & (pthjj > 50) & (df['pt_2'] > 30) & (mt > 50)
+
+  print 'Begin the slicing'
 
   sig_cuts = sig_cuts & evt_cuts
   mela_cuts = mela_cuts & evt_cuts
