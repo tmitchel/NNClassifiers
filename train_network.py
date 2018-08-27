@@ -114,13 +114,17 @@ def build_nn(nhid):
 
 def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
+  from ROOT import TLorentzVector
 
   print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
 
-  selection_vars = ['Dbkg_VBF', "njets", "numGenJets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
-    "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
-    "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
+  selection_vars = ['Dbkg_VBF', 'passDoubleTau35', 'filterDoubleTau35_1', 'filterDoubleTau35_2', 'matchDoubleTau35_1', 'matchDoubleTau35_2', 
+                    'passDoubleTauCmbIso35', 'filterDoubleTauCmbIso35_1', 'filterDoubleTauCmbIso35_2', 'matchDoubleTauCmbIso35_1', 'matchDoubleTauCmbIso35_2', 
+                    'pt_1', 'eta_1', 'phi_1', 'm_1', 'pt_2', 'eta_2', 'phi_2', 'm_2', 'againstElectronVLooseMVA6_1', 'againstElectronVLooseMVA6_2', 
+                    'againstMuonLoose3_1', 'againstMuonLoose3_2', 'byLooseIsolationMVArun2v1DBoldDMwLT_1', 'byLooseIsolationMVArun2v1DBoldDMwLT_2', 
+                    'extramuon_veto', 'extraelec_veto', 'njets', 
+                    ]
 
   selection_vars = [var for var in selection_vars if var not in vars]
   
@@ -131,15 +135,35 @@ def massage_data(vars, fname, sample_type):
   ifile.close()
 
   ## additional variables for selection that must be constructed can be added here
-  ## ...
+  higgs_pT, jets_m = np.array([]), np.array([])
+  tau1, tau2, met = TLorentzVector(), TLorentzVector(), TLorentzVector()
+  jet1, jet2 = TLorentzVector(), TLorentzVector()
+  for i in xrange(len(df['pt_1'])):
+    jet1.SetPtEtaPhiM(df['jpt_1'][i], df['jeta_1'][i], df['jphi_1'][i], 0.)
+    jet2.SetPtEtaPhiM(df['jpt_2'][i], df['jeta_2'][i], df['jphi_2'][i], 0.)
+    tau1.SetPtEtaPhiM(df['pt_1'][i], df['eta_1'][i], df['phi_1'][i], df['m_1'][i])
+    tau2.SetPtEtaPhiM(df['pt_2'][i], df['eta_2'][i], df['phi_2'][i], df['m_2'][i])
+    met.SetPtEtaPhiM(df['met'][i], 0., df['metphi'][i], 0.)
+    higgs_pT = np.append(higgs_pT, (met+tau1+tau2).Pt())
+    jets_m = np.append(jets_m, (jet1+jet2).M())
+
+  pt_higgs = pandas.Series(higgs_pT)
+  mass_jets = pandas.Series(jets_m)
+  tt_dr = ((df['eta_1']-df['eta_2'])*(df['eta_1']-df['eta_2']) +
+           (df['phi_1']-df['phi_2'])*(df['phi_1']-df['phi_2'])).apply(np.sqrt)
+
+  t35 = (df['passDoubleTau35'] > 0.5) & (df['filterDoubleTau35_1'] > 0.5) & (df['filterDoubleTau35_2'] > 0.5) \
+        & (df['matchDoubleTau35_1'] > 0.5) & (df['matchDoubleTau35_2'] > 0.5)
+  tcomb35 = (df['passDoubleTauCmbIso35'] > 0.5) & (df['filterDoubleTauCmbIso35_1'] > 0.5) & (df['filterDoubleTauCmbIso35_2'] > 0.5) \
+        & (df['matchDoubleTauCmbIso35_1'] > 0.5) & (df['matchDoubleTauCmbIso35_2'] > 0.5)
 
   ## define event selection
   mela_cuts = (df['Dbkg_VBF'] > -100)
   sig_cuts = (df['Q2V1'] > -100)
-  evt_cuts = (df['pt_sv'] > 100) & (df['mjj'] > 300) & (df['againstElectronVLooseMVA6_1'] > 0.5) \
-    & (df['againstElectronVLooseMVA6_2'] > 0.5) & (df['againstMuonLoose3_1'] > 0.5) & (df['againstMuonLoose3_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
-    & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) & (df['extraelec_veto'] < 0.5) & (df['extramuon_veto'] < 0.5) \
-    & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) )  
+  evt_cuts = (t35) & (tcomb35) & (tt_dr > 0.5) & (df['againstElectronVLooseMVA6_1'] > 0.5) & (df['againstElectronVLooseMVA6_2'] > 0.5) \
+      & (df['againstMuonLoose3_1'] > 0.5) & (df['againstMuonLoose3_2'] > 0.5) & (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
+      & (df['byLooseIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) & (df['extramuon_veto'] < 0.5) & (df['extraelec_veto'] < 0.5) & (df['njets'] > 2) \
+      & (pt_higgs > 100) & (mass_jets > 300)
 
   sig_cuts = sig_cuts & evt_cuts
   mela_cuts = mela_cuts & evt_cuts
