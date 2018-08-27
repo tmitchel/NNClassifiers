@@ -68,7 +68,7 @@ def getWeight(xs, fname):
   nevnts = fin.Get('nevents').GetBinContent(2)
   return (xs*lumi)/nevnts
 
-VBFweight = getWeight(3.782*0.0627, 'VBFHtoTauTau125_svFit_MELA.root')
+VBFweight = getWeight(3.782*0.0627, 'VBF125.root')
 cross_sections = {
   0: 1.42383,
   1: 0.45846,
@@ -119,8 +119,8 @@ def massage_data(vars, fname, sample_type):
   print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
 
-  selection_vars = ['Dbkg_VBF', 'pt_1', 'eta_1', 'phi_1', 'm_1', 'pt_2', 'eta_2', 'phi_2', 'm_2', 'met', 'metphi', 
-      'passEle25', 'filterEle25', 'matchEle25', 'decayModeFinding_2', 'iso_1', 'njets', 'mjj',
+  selection_vars = ['Dbkg_VBF', 'px_1', 'py_1', 'pt_1', 'eta_1', 'phi_1', 'm_1', 'pt_2', 'eta_2', 'phi_2', 'm_2', 'met', 'metphi', 
+      'passEle25', 'filterEle25', 'matchEle25', 'decayModeFinding_2', 'iso_1', 'njets', 'mjj', 'numGenJets',
       'againstMuonLoose3_2', 'againstElectronTightMVA6_2', 'byTightIsolationMVArun2v1DBoldDMwLT_2'
       ]
   # selection_vars = ['Dbkg_VBF', "njets", "numGenJets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
@@ -135,23 +135,28 @@ def massage_data(vars, fname, sample_type):
   df = pandas.DataFrame(branches, columns=slicer)  ## DataFrame holding NN input
   ifile.close()
 
+  sum_pT = np.array([])
   ## additional variables for selection that must be constructed can be added here
   met, ele, tau = TLorentzVector(), TLorentzVector(), TLorentzVector()
   for i in range(len(df['pt_1'])):
     met.SetPtEtaPhiM(df['met'][i] , 0.            , df['metphi'][i], 0.)
     ele.SetPtEtaPhiM(df['pt_1'][i], df['eta_1'][i], df['phi_1'][i] , df['m_1'][i])
     tau.SetPtEtaPhiM(df['pt_2'][i], df['eta_2'][i], df['phi_2'][i] , df['m_2'][i])
-    df['ptjj'][i] = (met+ele+tau).Pt()
+    sum_pT.append((met+ele+tau).Pt())
+    
+  pthjj = pandas.Series(sum_pT)
 
-  selection_vars.append('ptjj')
+  met_x = df['metphi'].apply(np.cos) + df['met']
+  met_y = df['metphi'].apply(np.sin) + df['met']
+  met_pT = (met_x*met_x + met_y*met_y).apply(np.sqrt)
+  mt = ( (df['pt_1']+met_pT)*(df['pt_1']+met_pT) + (df['px_1']+met_x)*(df['px_1']+met_x) + (df['py_1']*met_y)*(df['py_1']*met_y) ).apply(np.sqrt)
 
   ## define event selection
   mela_cuts = (df['Dbkg_VBF'] > -100)
   sig_cuts = (df['Q2V1'] > -100)
-  evt_cuts = (df['pt_sv'] > 100) & (df['mjj'] > 300) & (df['againstElectronVLooseMVA6_1'] > 0.5) \
-    & (df['againstElectronVLooseMVA6_2'] > 0.5) & (df['againstMuonLoose3_1'] > 0.5) & (df['againstMuonLoose3_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
-    & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) & (df['extraelec_veto'] < 0.5) & (df['extramuon_veto'] < 0.5) \
-    & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) )  
+  evt_cuts = (df['pt_1'] > 26) & (abs(df['eta_1']) < 2.1) & (df['passEle25'] > 0.5) & (df['filterEle25'] > 0.5) & (df['matchEle25'] > 0.5) & (df['decayModeFinding_2'] > 0.5) \
+            & (abs(df['eta_1']) < 2.3) & (df['againstMuonLoose3_2'] > 0.5) & (df['againstElectronTightMVA6_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) \
+            & (df['iso_1'] < 0.10) & (df['njets'] > 1) & (df['mjj'] > 300) & (pthjj > 50) & (df['pt_2'] > 30) & (mt > 50)
 
   sig_cuts = sig_cuts & evt_cuts
   mela_cuts = mela_cuts & evt_cuts
@@ -270,7 +275,7 @@ def MELA_ROC(sig, bkg):
 
 if __name__ == "__main__":
   ## format the data
-  sig, mela_sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
+  sig, mela_sig = massage_data(args.vars, "input_files/VBF125.h5", "sig")
   input_length = sig.shape[1] - 2  ## get shape and remove weight & isSignal
   bkg, mela_bkg = massage_data(args.vars, "input_files/DY.h5", "bkg")
   all_data = pandas.concat([sig, bkg])
