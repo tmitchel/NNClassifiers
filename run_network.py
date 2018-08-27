@@ -53,7 +53,7 @@ def putInTree(fname, discs):
       adiscs[0] = -1
     elif itree.GetLeaf('pt_sv').GetValue() < 100:
       adiscs[0] = -1
-    elif 'VBF' not in fname and itree.GetLeaf('numGenJets').GetValue() != 2 and not njet:
+    elif 'VBF' not in fname and itree.GetLeaf('njets').GetValue() != 2 and not njet:
       adiscs[0] = -1
     # elif abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) < 2.5:
     elif itree.GetLeaf('mjj').GetValue() < 300:
@@ -89,7 +89,7 @@ def build_network(model_name):
   model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
   return model
 
-def create_dataframe():
+def create_dataframe(variables):
  ## begin section to run a trained NN on all events in a file
   print 'Loading data...'
   ifile = h5py.File('input_files/'+args.input+'.h5', 'r')
@@ -97,6 +97,8 @@ def create_dataframe():
   selection_vars = ['Dbkg_VBF', "numGenJets", "njets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
     "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
     "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
+
+  selection_vars = [var for var in selection_vars if var not in variables]
 
   slicer = tuple(variables) + tuple(selection_vars) ## add event selection variables
   branches = ifile["tt_tree"][slicer]
@@ -110,7 +112,7 @@ def create_dataframe():
     & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) )
 
   if not njet and 'VBF' not in args.input:
-    cuts = cuts & (df['numGenJets'] == 2)
+    cuts = cuts & (df['njets'] == 2)
 
   df = df[cuts]  ## apply event selection
   df = df.drop(selection_vars, axis=1)  ## remove unneeded branches from DataFrame
@@ -126,8 +128,8 @@ def normalize(df):
 
 if __name__ == "__main__":
 
-  with open(args.load_json, 'r') as fname:
-    params = json.load('model_params/'+fname)
+  with open('model_params/'+args.load_json, 'r') as fname:
+    params = json.load(fname)
 
   model_name = params['model_name']
   variables  = params['variables']
@@ -147,7 +149,7 @@ if __name__ == "__main__":
   model = build_network(model_name)
 
   ## load data and do event selection
-  df = create_dataframe()
+  df = create_dataframe(variables)
 
   ## normalize the data
   data = normalize(df)
