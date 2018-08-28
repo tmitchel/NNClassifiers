@@ -30,7 +30,7 @@ parser.add_argument('--dont_save_json', '-d', action='store_true',
                     )
 
 args = parser.parse_args()
-# input_length = len(args.vars)
+n_user_inputs = 0
 
 import h5py
 import pandas
@@ -56,7 +56,8 @@ def create_json(model_name):
         'model_name': model_name,
         'variables': args.vars,
         'nhidden': args.nhid,
-        'njet': args.njet
+        'njet': args.njet,
+        'n_user_inputs': int(n_user_inputs)
       }, fout
     )
 
@@ -123,9 +124,6 @@ def massage_data(vars, fname, sample_type):
       'passEle25', 'filterEle25', 'matchEle25', 'decayModeFinding_2', 'iso_1', 'njets', 'mjj', 'numGenJets',
       'againstMuonLoose3_2', 'againstElectronTightMVA6_2', 'byTightIsolationMVArun2v1DBoldDMwLT_2'
       ]
-  # selection_vars = ['Dbkg_VBF', "njets", "numGenJets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
-    # "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
-    # "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
 
   selection_vars = [var for var in selection_vars if var not in vars]
   
@@ -200,11 +198,18 @@ def massage_data(vars, fname, sample_type):
     df_roc['isSignal'] = np.ones(len(df_roc))
 
   ## additional input variables that must be constructed can be added here
-  #df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))  ## add to beginning because weight/isSignal must be last
+  #df = AddInput(db, 'dEtajj', abs(df['jeta_1'] - df['jeta_2']))
 
   ## drop event selection branches from NN input
   df = df.drop(selection_vars, axis=1)
   return df, df_roc
+
+
+def AddInput(dataf, name, val):
+   dataf.insert(loc=0, column=name, value=val)
+   global n_user_inputs
+   n_user_inputs += .5
+   return dataf
 
 def build_plots(history, label_test, other=None):
   """ do whatever plotting is needed """

@@ -33,51 +33,26 @@ def putInTree(fname, discs):
   """Function to write a new file copying old TTree and adding NN discriminant"""
   from ROOT import TFile
   from array import array
-  fin = TFile('input_files/'+fname+'.root', 'update')
-  itree = fin.Get('tt_tree')
+  fin = TFile(fname, 'update')
+  itree = fin.Get('etau_tree')
   nentries = itree.GetEntries()
-  fout = TFile('output_files/'+fname+'_NN.root', 'recreate')  ## make new file for output
+  oname = fname.split('/')[-1].split('.root')[0]
+  fout = TFile('output_files/'+oname+'_NN.root', 'recreate')  ## make new file for output
   fout.cd()
   ntree = itree.CloneTree(-1, 'fast')  ## copy all branches from old tree
   adiscs = array('f', [0.])
   disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')  ## make a new branch to store the disc
-  j = 0
+  
   for i in range(nentries):
-    itree.GetEntry(i)
-
     if i % 100000 == 0:
       print '{} events of out {} have been processed'.format(i, nentries)
-
-    ## verbose way to do selection, but this step takes a long time so hopefully this will filter out bad events quicker
-    if itree.GetLeaf('Q2V1').GetValue() == -100:
-      adiscs[0] = -1
-    elif itree.GetLeaf('pt_sv').GetValue() < 100:
-      adiscs[0] = -1
-    elif 'VBF' not in fname and itree.GetLeaf('njets').GetValue() != 2 and not njet:
-      adiscs[0] = -1
-    # elif abs(itree.GetLeaf('jeta_1').GetValue() - itree.GetLeaf('jeta_2').GetValue()) < 2.5:
-    elif itree.GetLeaf('mjj').GetValue() < 300:
-      adiscs[0] = -1
-    elif itree.GetLeaf('againstElectronVLooseMVA6_1').GetValue() < 0.5 or itree.GetLeaf('againstElectronVLooseMVA6_2').GetValue() < 0.5:
-      adiscs[0] = -1
-    elif itree.GetLeaf('againstMuonLoose3_1').GetValue() < 0.5 or itree.GetLeaf('againstMuonLoose3_2').GetValue() < 0.5:
-      adiscs[0] = -1
-    elif itree.GetLeaf('byTightIsolationMVArun2v1DBoldDMwLT_1').GetValue() < 0.5 or itree.GetLeaf('byTightIsolationMVArun2v1DBoldDMwLT_2').GetValue() < 0.5:
-      adiscs[0] = -1
-    elif itree.GetLeaf('extraelec_veto').GetValue() > 0.5 or itree.GetLeaf('extramuon_veto').GetValue() > 0.5:
-      adiscs[0] = -1
-    elif itree.GetLeaf('byLooseIsolationMVArun2v1DBoldDMwLT_1').GetValue() < 0.5 and itree.GetLeaf('byLooseIsolationMVArun2v1DBoldDMwLT_2').GetValue() < 0.5:
-      adiscs[0] = -1
-    else:  ## passes event selection
-      adiscs[0] = discs[j][0]
-      j += 1
-
+      adiscs[0] = discs[i][0]
     fout.cd()
     disc_branch.Fill()
+
   fin.Close()
   fout.cd()
   ntree.Write()
-  print '\nin tree'
 
 def build_network(model_name):
   print 'Building the network...'
@@ -92,30 +67,22 @@ def build_network(model_name):
 def create_dataframe(variables):
  ## begin section to run a trained NN on all events in a file
   print 'Loading data...'
-  ifile = h5py.File('input_files/'+args.input+'.h5', 'r')
+  fname = args.input.split('.root')[0]
+  ifile = h5py.File(fname+'.h5', 'r')
 
-  selection_vars = ['Dbkg_VBF', "numGenJets", "njets", "pt_sv", "jeta_1", "jeta_2", "againstElectronVLooseMVA6_1", "againstElectronVLooseMVA6_2", \
-    "againstMuonLoose3_1", "againstMuonLoose3_2", "byTightIsolationMVArun2v1DBoldDMwLT_2", "byTightIsolationMVArun2v1DBoldDMwLT_1", "extraelec_veto", "extramuon_veto",\
-    "byLooseIsolationMVArun2v1DBoldDMwLT_2", "byLooseIsolationMVArun2v1DBoldDMwLT_1", "mjj"]
-
+  selection_vars = ['jeta_1', 'jphi_1', 'jeta_2', 'jphi_2']
+  # remove duplicates
   selection_vars = [var for var in selection_vars if var not in variables]
 
-  slicer = tuple(variables) + tuple(selection_vars) ## add event selection variables
-  branches = ifile["tt_tree"][slicer]
+  # add event selection variables
+  slicer = tuple(variables) + tuple(selection_vars)
+  branches = ifile["etau_tree"][slicer]
   df = pandas.DataFrame(branches, columns=slicer)
   ifile.close()
 
-  ## define event selection
-  cuts = (df[variables[0]] > -100) & (df['pt_sv'] > 100) & (df['mjj'] > 300) & (df['againstElectronVLooseMVA6_1'] > 0.5) \
-    & (df['againstElectronVLooseMVA6_2'] > 0.5) & (df['againstMuonLoose3_1'] > 0.5) & (df['againstMuonLoose3_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
-    & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) & (df['extraelec_veto'] < 0.5) & (df['extramuon_veto'] < 0.5) \
-    & ( (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) | (df['byLooseIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) )
-
-  if not njet and 'VBF' not in args.input:
-    cuts = cuts & (df['njets'] == 2)
-
-  df = df[cuts]  ## apply event selection
-  df = df.drop(selection_vars, axis=1)  ## remove unneeded branches from DataFrame
+  df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))
+  # remove unneeded branches from DataFrame
+  df = df.drop(selection_vars, axis=1)
   return df
 
 def normalize(df):
@@ -128,14 +95,14 @@ def normalize(df):
 
 if __name__ == "__main__":
 
-  with open('model_params/'+args.load_json, 'r') as fname:
+  with open(args.load_json, 'r') as fname:
     params = json.load(fname)
 
   model_name = params['model_name']
   variables  = params['variables']
   njet       = params['njet']
   nhid       = params['nhidden']
-  input_length = len(variables)
+  input_length = len(variables) + params['n_user_inputs']
 
  
   model_name = 'models/' + model_name + '.hdf5'
