@@ -39,6 +39,8 @@ def putInTree(fname, discs):
   oname = fname.split('/')[-1].split('.root')[0]
   fout = TFile('output_files/'+oname+'_NN.root', 'recreate')  ## make new file for output
   fout.cd()
+  nevents = fin.Get("nevents").Clone()
+  nevents.Write()
   ntree = itree.CloneTree(-1, 'fast')  ## copy all branches from old tree
   adiscs = array('f', [0.])
   disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')  ## make a new branch to store the disc
