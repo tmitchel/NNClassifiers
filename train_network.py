@@ -30,7 +30,7 @@ parser.add_argument('--dont_save_json', '-d', action='store_true',
                     )
 
 args = parser.parse_args()
-# input_length = len(args.vars)
+n_user_inputs = 0
 
 import h5py
 import pandas
@@ -56,19 +56,20 @@ def create_json(model_name):
         'model_name': model_name,
         'variables': args.vars,
         'nhidden': args.nhid,
-        'njet': args.njet
+        'njet': args.njet,
+        'n_user_inputs': int(n_user_inputs)
       }, fout
     )
 
 def getWeight(xs, fname):
   """Return SF for normalization of a given sample at lumi=35900 fb^-1"""
-  from ROOT import TFile
+  from ROOT import TFile, TLorentzVector
   lumi = 35900.
   fin = TFile('input_files/'+fname, 'r')
   nevnts = fin.Get('nevents').GetBinContent(2)
   return (xs*lumi)/nevnts
 
-VBFweight = getWeight(3.782*0.0627, 'VBFHtoTauTau125_svFit_MELA.root')
+VBFweight = getWeight(3.782*0.0627, 'VBF125.root')
 cross_sections = {
   0: 1.42383,
   1: 0.45846,
@@ -119,22 +120,23 @@ def massage_data(vars, fname, sample_type):
   print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
 
-  selection_vars = ['Dbkg_VBF', 'passDoubleTau35', 'filterDoubleTau35_1', 'filterDoubleTau35_2', 'matchDoubleTau35_1', 'matchDoubleTau35_2', 
-                    'passDoubleTauCmbIso35', 'filterDoubleTauCmbIso35_1', 'filterDoubleTauCmbIso35_2', 'matchDoubleTauCmbIso35_1', 'matchDoubleTauCmbIso35_2', 
-                    'pt_1', 'eta_1', 'phi_1', 'm_1', 'pt_2', 'eta_2', 'phi_2', 'm_2', 'againstElectronVLooseMVA6_1', 'againstElectronVLooseMVA6_2', 
-                    'againstMuonLoose3_1', 'againstMuonLoose3_2', 'byLooseIsolationMVArun2v1DBoldDMwLT_1', 'byLooseIsolationMVArun2v1DBoldDMwLT_2', 
-                    'extramuon_veto', 'extraelec_veto', 'njets', 
-                    ]
-
+  selection_vars = ['Dbkg_VBF', 'px_1', 'py_1', 'pt_1', 'eta_1', 'phi_1', 'm_1', 'pt_2', 'eta_2', 'phi_2', 'm_2', 'met', 'metphi', 
+      'passEle25', 'filterEle25', 'matchEle25', 'decayModeFinding_2', 'iso_1', 'njets', 'mjj', 'numGenJets',
+      'againstMuonLoose3_2', 'againstElectronTightMVA6_2', 'byTightIsolationMVArun2v1DBoldDMwLT_2'
+      ]
   selection_vars = [var for var in selection_vars if var not in vars]
   
   slicer = tuple(vars) + tuple(selection_vars)  ## add variables for event selection
-  branches = ifile["tt_tree"][slicer]
+  branches = ifile["etau_tree"][slicer]
   df_roc = pandas.DataFrame(branches, columns=['Dbkg_VBF'])  ## DataFrame used for MELA ROC curve
   df = pandas.DataFrame(branches, columns=slicer)  ## DataFrame holding NN input
   ifile.close()
 
+  print 'Input data is now in the DataFrame'
+
+  sum_pT = np.empty(len(df['pt_1']))
   ## additional variables for selection that must be constructed can be added here
+  
   higgs_pT, jets_m = np.array([]), np.array([])
   tau1, tau2, met = TLorentzVector(), TLorentzVector(), TLorentzVector()
   jet1, jet2 = TLorentzVector(), TLorentzVector()
@@ -160,10 +162,11 @@ def massage_data(vars, fname, sample_type):
   ## define event selection
   mela_cuts = (df['Dbkg_VBF'] > -100)
   sig_cuts = (df['Q2V1'] > -100)
-  evt_cuts = (t35) & (tcomb35) & (tt_dr > 0.5) & (df['againstElectronVLooseMVA6_1'] > 0.5) & (df['againstElectronVLooseMVA6_2'] > 0.5) \
-      & (df['againstMuonLoose3_1'] > 0.5) & (df['againstMuonLoose3_2'] > 0.5) & (df['byLooseIsolationMVArun2v1DBoldDMwLT_1'] > 0.5) \
-      & (df['byLooseIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) & (df['extramuon_veto'] < 0.5) & (df['extraelec_veto'] < 0.5) & (df['njets'] > 2) \
-      & (pt_higgs > 100) & (mass_jets > 300)
+  evt_cuts = (df['pt_1'] > 26) & (abs(df['eta_1']) < 2.1) & (df['passEle25'] > 0.5) & (df['filterEle25'] > 0.5) & (df['matchEle25'] > 0.5) & (df['decayModeFinding_2'] > 0.5) \
+            & (abs(df['eta_1']) < 2.3) & (df['againstMuonLoose3_2'] > 0.5) & (df['againstElectronTightMVA6_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) \
+            & (df['iso_1'] < 0.10) & (df['njets'] > 1) & (df['mjj'] > 300) & (pthjj > 50) & (df['pt_2'] > 30) & (mt > 50)
+
+  print 'Begin the slicing'
 
   sig_cuts = sig_cuts & evt_cuts
   mela_cuts = mela_cuts & evt_cuts
@@ -200,11 +203,18 @@ def massage_data(vars, fname, sample_type):
     df_roc['isSignal'] = np.ones(len(df_roc))
 
   ## additional input variables that must be constructed can be added here
-  #df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))  ## add to beginning because weight/isSignal must be last
+  #df = AddInput(db, 'dEtajj', abs(df['jeta_1'] - df['jeta_2']))
 
   ## drop event selection branches from NN input
   df = df.drop(selection_vars, axis=1)
   return df, df_roc
+
+
+def AddInput(dataf, name, val):
+   dataf.insert(loc=0, column=name, value=val)
+   global n_user_inputs
+   n_user_inputs += .5
+   return dataf
 
 def build_plots(history, label_test, other=None):
   """ do whatever plotting is needed """
@@ -282,7 +292,7 @@ def MELA_ROC(sig, bkg):
 
 if __name__ == "__main__":
   ## format the data
-  sig, mela_sig = massage_data(args.vars, "input_files/VBFHtoTauTau125_svFit_MELA.h5", "sig")
+  sig, mela_sig = massage_data(args.vars, "input_files/VBF125.h5", "sig")
   input_length = sig.shape[1] - 2  ## get shape and remove weight & isSignal
   bkg, mela_bkg = massage_data(args.vars, "input_files/DY.h5", "bkg")
   all_data = pandas.concat([sig, bkg])

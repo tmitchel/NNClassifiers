@@ -21,9 +21,9 @@ In order to use the framework, you must setup a virtual environment with all nec
 
         source pyenv/bin/activate
 
-2. Then, you must convert all root files to HDF5 files which are easily loaded by the network. These files must be stored in the `input_files` directory. Files will retain the same name, but different extension.
+2. Then, you must convert all root files to HDF5 files which are easily loaded by the network. The script `convert_root_to_hdf5.sh` takes a directory name as an input parameter then converts all *.root files in the given directory into *.h5 files in the same directory. The original root files will be retained. The following command will convert all *.root files in `input_files` into *.h5 files.
 
-        bash convert_root_to_hdf5.sh
+        bash convert_root_to_hdf5.sh input_files
 
 
 # Instructions for running the network
@@ -54,14 +54,25 @@ When run in verbose mode, the script will also produce a ROC curve saved as a pd
 
 ## Creating your own variables
 
-Variables not present in the input trees can be used, as long as they can be formed from other variables present in the tree. These variables cannot be provided as command-line options to `--vars`, but must be defined inside `train_network.py`. Additional variables required for selection may be defined on [Line #134](https://github.com/tmitchel/HTT_NN/blob/master/train_network.py#L134 "train_network.py"). For example, 
-```python
-df.insert(loc=0, column='hjj_pt', value=(higgs+j1+j2).Pt())
-```
+Variables not present in the input trees can be used, as long as they can be formed from other variables present in the tree. These variables cannot be provided as command-line options to `--vars`, but must be defined inside `train_network.py`. Additional variables required for selection may be defined on [Line #134](https://github.com/tmitchel/HTT_NN/blob/master/train_network.py#L134 "train_network.py"). These variables may be constructed as a column in the DataFrame, but you must remember to explicitly drop them before you return the DataFrame for training. Altenatively, you may construct a variable as a `pandas.Series` and avoid the need to explicitly drop that column. Examples are shown below:
 
-Variables to be used as input to the network may be defined on [Line #179](https://github.com/tmitchel/HTT_NN/blob/master/train_network.py#L179 "train_network.py"). You must make sure not to insert the variable to the end of the DataFrame, because the weights and labels must be in the last two columns. An example,
+- Placing the selection variable in the DataFrame 
+    ```python
+    df.insert(loc=0, column='hjj_pt', value=(higgs+j1+j2).Pt())
+    ```
+    Remember to drop this column so it is not used as an input for training
+    ```python
+    df = df.drop('hjj_pt', axis=1)
+    ```
+
+- Construct a `pandas.Series` for the selectino variable
+    ```python
+    pthjj = pandas.Series([1,2,3])
+    ```
+
+Variables to be used as input to the network may be defined on [Line #201](https://github.com/tmitchel/HTT_NN/blob/master/train_network.py#L179 "train_network.py") using the `AddInput` function. This function will construct the variable with the given name, add it to the provided DataFrame, and increment the number of variables stored in the model's JSON file. An example,
 ```python
-df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))
+df = AddInput(df, 'dEtajj', abs(df['jeta_1'] - df['jeta_2']))
 ```
 
 ## Running the network on an input file
@@ -70,7 +81,7 @@ The script `run_network.py` is used to process an input file using a pre-trained
 
 An example usage is shown below
 
-    python run_network.py -i DY -l model_store.json
+    python run_network.py -i input_files/DY.root -l model_params/model_store.json
 
 This will load the model parameters (including the name) from `model_store.json` and run the trained network on an input file named `DY.h5`. The output file will be `output_files/DY_NN.root` This file will contain a copy of the original TTree along with the new discriminant `NN_disc` as shown below:
 
@@ -79,6 +90,18 @@ This will load the model parameters (including the name) from `model_store.json`
 More command-line options exist for convenince. They can be seen with 
 
     python run_network.py -h
+
+## Automated Running
+
+A script to automate running the classifier on all root files in a directory is provided for convenience. The script, `automate.sh` takes two options and one optional flag. 
+
+- -m is used to specify the name of the model to lead
+- -i is used to specify the name of the input directory
+- -v (flag) is used to activate --verbose mode
+
+```bash
+./automate -v -i input_files -m model_params/model_store.json
+```
 
 # (Optional) Cleaning trees before conversion
 

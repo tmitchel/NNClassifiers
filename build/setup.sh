@@ -1,5 +1,6 @@
 #!/usr/bin bash
 
+cd ..
 if [ ! -d "$pyenv" ]; then
   virtualenv pyenv # setup virtual enviroment
 fi
