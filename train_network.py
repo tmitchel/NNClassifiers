@@ -61,24 +61,6 @@ def create_json(model_name):
       }, fout
     )
 
-def getWeight(xs, fname):
-  """Return SF for normalization of a given sample at lumi=35900 fb^-1"""
-  from ROOT import TFile, TLorentzVector
-  lumi = 35900.
-  fin = TFile('input_files/'+fname, 'r')
-  nevnts = fin.Get('nevents').GetBinContent(2)
-  return (xs*lumi)/nevnts
-
-VBFweight = getWeight(3.782*0.0627, 'VBF125.root')
-cross_sections = {
-  0: 1.42383,
-  1: 0.45846,
-  2: 0.46762,
-  3: 0.48084,
-  4: 0.39415,
-  'VBF125': VBFweight,
-}
-
 def build_nn(nhid):
   """ Build and return the model with callback functions """
 
@@ -120,98 +102,61 @@ def massage_data(vars, fname, sample_type):
   print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
   ifile = h5py.File(fname, 'r')
 
-  selection_vars = ['Dbkg_VBF', 'px_1', 'py_1', 'pt_1', 'eta_1', 'phi_1', 'm_1', 'pt_2', 'eta_2', 'phi_2', 'm_2', 'met', 'metphi', 
-      'passEle25', 'filterEle25', 'matchEle25', 'decayModeFinding_2', 'iso_1', 'njets', 'mjj', 'numGenJets',
-      'againstMuonLoose3_2', 'againstElectronTightMVA6_2', 'byTightIsolationMVArun2v1DBoldDMwLT_2'
-      ]
-  selection_vars = [var for var in selection_vars if var not in vars]
+  # selection_vars = []
+  # selection_vars = [var for var in selection_vars if var not in vars]
   
-  slicer = tuple(vars) + tuple(selection_vars)  ## add variables for event selection
-  branches = ifile["etau_tree"][slicer]
+  # slicer = tuple(vars) + tuple(selection_vars)  ## add variables for event selection
+  # branches = ifile["etau_tree"][slicer]
+
+  branches = ifile["mutau_tree"][()]
   df_roc = pandas.DataFrame(branches, columns=['Dbkg_VBF'])  ## DataFrame used for MELA ROC curve
-  df = pandas.DataFrame(branches, columns=slicer)  ## DataFrame holding NN input
+  # df = pandas.DataFrame(branches, columns=slicer)  ## DataFrame holding NN input
+  df = pandas.DataFrame(branches)  # DataFrame holding NN input
   ifile.close()
 
   print 'Input data is now in the DataFrame'
 
-  sum_pT = np.empty(len(df['pt_1']))
   ## additional variables for selection that must be constructed can be added here
-  
-  higgs_pT, jets_m = np.array([]), np.array([])
-  tau1, tau2, met = TLorentzVector(), TLorentzVector(), TLorentzVector()
-  jet1, jet2 = TLorentzVector(), TLorentzVector()
-  for i in xrange(len(df['pt_1'])):
-    jet1.SetPtEtaPhiM(df['jpt_1'][i], df['jeta_1'][i], df['jphi_1'][i], 0.)
-    jet2.SetPtEtaPhiM(df['jpt_2'][i], df['jeta_2'][i], df['jphi_2'][i], 0.)
-    tau1.SetPtEtaPhiM(df['pt_1'][i], df['eta_1'][i], df['phi_1'][i], df['m_1'][i])
-    tau2.SetPtEtaPhiM(df['pt_2'][i], df['eta_2'][i], df['phi_2'][i], df['m_2'][i])
-    met.SetPtEtaPhiM(df['met'][i], 0., df['metphi'][i], 0.)
-    higgs_pT = np.append(higgs_pT, (met+tau1+tau2).Pt())
-    jets_m = np.append(jets_m, (jet1+jet2).M())
 
-  pt_higgs = pandas.Series(higgs_pT)
-  mass_jets = pandas.Series(jets_m)
-  tt_dr = ((df['eta_1']-df['eta_2'])*(df['eta_1']-df['eta_2']) +
-           (df['phi_1']-df['phi_2'])*(df['phi_1']-df['phi_2'])).apply(np.sqrt)
-
-  t35 = (df['passDoubleTau35'] > 0.5) & (df['filterDoubleTau35_1'] > 0.5) & (df['filterDoubleTau35_2'] > 0.5) \
-        & (df['matchDoubleTau35_1'] > 0.5) & (df['matchDoubleTau35_2'] > 0.5)
-  tcomb35 = (df['passDoubleTauCmbIso35'] > 0.5) & (df['filterDoubleTauCmbIso35_1'] > 0.5) & (df['filterDoubleTauCmbIso35_2'] > 0.5) \
-        & (df['matchDoubleTauCmbIso35_1'] > 0.5) & (df['matchDoubleTauCmbIso35_2'] > 0.5)
-
-  ## define event selection
-  mela_cuts = (df['Dbkg_VBF'] > -100)
-  sig_cuts = (df['Q2V1'] > -100)
-  evt_cuts = (df['pt_1'] > 26) & (abs(df['eta_1']) < 2.1) & (df['passEle25'] > 0.5) & (df['filterEle25'] > 0.5) & (df['matchEle25'] > 0.5) & (df['decayModeFinding_2'] > 0.5) \
-            & (abs(df['eta_1']) < 2.3) & (df['againstMuonLoose3_2'] > 0.5) & (df['againstElectronTightMVA6_2'] > 0.5) & (df['byTightIsolationMVArun2v1DBoldDMwLT_2'] > 0.5) \
-            & (df['iso_1'] < 0.10) & (df['njets'] > 1) & (df['mjj'] > 300) & (pthjj > 50) & (df['pt_2'] > 30) & (mt > 50)
+  ## define additional event selection
 
   print 'Begin the slicing'
 
-  sig_cuts = sig_cuts & evt_cuts
-  mela_cuts = mela_cuts & evt_cuts
+  qual_cut = (df['Q2V1'] > 0)
+  df = df[qual_cut]
 
   if 'bkg' in sample_type:
 
-    ## choose DY + 2-Jets or DY + N-Jets
-    bkg_cuts = sig_cuts
-    if not args.njet:
-      bkg_cuts = bkg_cuts & (df['njets'] == 2)
-
     ## format background DataFrame for NN input
-    df = df[bkg_cuts]
     df['isSignal'] = np.zeros(len(df))  ## put label in DataFrame (bkg=0)
 
-    ## get cross section normalization
-    df['weight'] = np.array([cross_sections[i] for i in df['numGenJets']])
-
     ## format bkg DataFrame for MELA ROC curve
-    df_roc = df_roc[bkg_cuts]
+    df_roc = df_roc[qual_cut]
     df_roc['isSignal'] = np.zeros(len(df_roc))
 
   else:
 
     ## format signal DataFrame for NN input
-    df = df[sig_cuts]
     df['isSignal'] = np.ones(len(df))  ## put label in DataFrame (sig=1)
 
-    ## get cross section normalization
-    df['weight'] = np.array([cross_sections['VBF125'] for i in range(len(df))])
-
     ## format bkg DataFrame for MELA ROC curve
-    df_roc = df_roc[sig_cuts]
+    df_roc = df_roc[qual_cut]
     df_roc['isSignal'] = np.ones(len(df_roc))
 
   ## additional input variables that must be constructed can be added here
   #df = AddInput(db, 'dEtajj', abs(df['jeta_1'] - df['jeta_2']))
 
   ## drop event selection branches from NN input
-  df = df.drop(selection_vars, axis=1)
+  # df = df.drop(selection_vars, axis=1)
+
+  evtwt = df['evtwt']
+  df = df.drop('evtwt', axis=1)
+  df = AddInput(df, 'evtwt', evtwt)
   return df, df_roc
 
 
 def AddInput(dataf, name, val):
-   dataf.insert(loc=0, column=name, value=val)
+   dataf.insert(loc=dataf.shape[1], column=name, value=val)
    global n_user_inputs
    n_user_inputs += .5
    return dataf
@@ -294,7 +239,8 @@ if __name__ == "__main__":
   ## format the data
   sig, mela_sig = massage_data(args.vars, "input_files/VBF125.h5", "sig")
   input_length = sig.shape[1] - 2  ## get shape and remove weight & isSignal
-  bkg, mela_bkg = massage_data(args.vars, "input_files/DY.h5", "bkg")
+  bkg, mela_bkg = massage_data(args.vars, "input_files/ZTT.h5", "bkg")
+  print bkg.shape
   all_data = pandas.concat([sig, bkg])
   dataset = all_data.values
   data = dataset[:,0:input_length]  ## get numpy array with all input variables
