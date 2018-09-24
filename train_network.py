@@ -143,11 +143,14 @@ def massage_data(vars, fname, sample_type):
     df_roc = df_roc[qual_cut]
     df_roc['isSignal'] = np.ones(len(df_roc))
 
+  all_branch = list(df.columns.values)
+  remove_branch = [var for var in all_branch if var not in vars]
+
   ## additional input variables that must be constructed can be added here
   #df = AddInput(db, 'dEtajj', abs(df['jeta_1'] - df['jeta_2']))
 
   ## drop event selection branches from NN input
-  # df = df.drop(selection_vars, axis=1)
+  df = df.drop(remove_branch, axis=1)
 
   evtwt = df['evtwt']
   df = df.drop('evtwt', axis=1)
@@ -238,9 +241,9 @@ def MELA_ROC(sig, bkg):
 if __name__ == "__main__":
   ## format the data
   sig, mela_sig = massage_data(args.vars, "input_files/VBF125.h5", "sig")
+  print sig
   input_length = sig.shape[1] - 2  ## get shape and remove weight & isSignal
   bkg, mela_bkg = massage_data(args.vars, "input_files/ZTT.h5", "bkg")
-  print bkg.shape
   all_data = pandas.concat([sig, bkg])
   dataset = all_data.values
   data = dataset[:,0:input_length]  ## get numpy array with all input variables
