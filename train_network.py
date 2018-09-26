@@ -37,6 +37,7 @@ import pandas
 import numpy as np
 from os import environ
 from pprint import pprint
+from root_pandas import read_root
 environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Keras import
 from keras.models import Model
 from keras.layers import Input, Activation, Dense
@@ -99,21 +100,15 @@ def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
   from ROOT import TLorentzVector
 
-  print 'Slicing and dicing...', fname.split('.h5')[0].split('input_files/')[-1]
-  ifile = h5py.File(fname, 'r')
-
-  # selection_vars = []
-  # selection_vars = [var for var in selection_vars if var not in vars]
+  print 'Slicing and dicing...', fname.split('.root')[0].split('input_files/')[-1]
+  other_vars = ['evtwt', 'passSelection', 'Dbkg_VBF']
+  slicer = vars + other_vars  ## add variables for event selection
   
-  # slicer = tuple(vars) + tuple(selection_vars)  ## add variables for event selection
-  # branches = ifile["etau_tree"][slicer]
-
-  branches = ifile["mutau_tree"][()]
-  df_roc = pandas.DataFrame(branches, columns=['Dbkg_VBF'])  ## DataFrame used for MELA ROC curve
-  # df = pandas.DataFrame(branches, columns=slicer)  ## DataFrame holding NN input
-  df = pandas.DataFrame(branches)  # DataFrame holding NN input
-  ifile.close()
-
+  ## Switch to using root_pandas
+  df = read_root(fname, columns=slicer) 
+  df_roc = pandas.DataFrame()
+  df_roc['Dbkg_VBF'] = df[(df['passSelection'] > 0) & (df['Dbkg_VBF'] > 0)]['Dbkg_VBF']
+  
   print 'Input data is now in the DataFrame'
 
   ## additional variables for selection that must be constructed can be added here
@@ -122,7 +117,7 @@ def massage_data(vars, fname, sample_type):
 
   print 'Begin the slicing'
 
-  qual_cut = (df['Q2V1'] > 0)
+  qual_cut = (df['Q2V1'] > 0) & (df['passSelection'] > 0) & (df['evtwt'] > 0)
   df = df[qual_cut]
 
   if 'bkg' in sample_type:
@@ -131,7 +126,6 @@ def massage_data(vars, fname, sample_type):
     df['isSignal'] = np.zeros(len(df))  ## put label in DataFrame (bkg=0)
 
     ## format bkg DataFrame for MELA ROC curve
-    df_roc = df_roc[qual_cut]
     df_roc['isSignal'] = np.zeros(len(df_roc))
 
   else:
@@ -140,21 +134,16 @@ def massage_data(vars, fname, sample_type):
     df['isSignal'] = np.ones(len(df))  ## put label in DataFrame (sig=1)
 
     ## format bkg DataFrame for MELA ROC curve
-    df_roc = df_roc[qual_cut]
     df_roc['isSignal'] = np.ones(len(df_roc))
-
-  all_branch = list(df.columns.values)
-  remove_branch = [var for var in all_branch if var not in vars]
-
+    
   ## additional input variables that must be constructed can be added here
   #df = AddInput(db, 'dEtajj', abs(df['jeta_1'] - df['jeta_2']))
 
+  weight = df['evtwt']
+  df.insert(loc=df.shape[1], column='weight', value=weight)
+  
   ## drop event selection branches from NN input
-  df = df.drop(remove_branch, axis=1)
-
-  evtwt = df['evtwt']
-  df = df.drop('evtwt', axis=1)
-  df = AddInput(df, 'evtwt', evtwt)
+  df = df.drop(other_vars, axis=1)
   return df, df_roc
 
 
@@ -240,20 +229,18 @@ def MELA_ROC(sig, bkg):
 
 if __name__ == "__main__":
   ## format the data
-  sig, mela_sig = massage_data(args.vars, "input_files/VBF125.h5", "sig")
-  print sig
+  sig, mela_sig = massage_data(args.vars, "input_files/VBF125.root", "sig")
   input_length = sig.shape[1] - 2  ## get shape and remove weight & isSignal
-  bkg, mela_bkg = massage_data(args.vars, "input_files/ZTT.h5", "bkg")
+  bkg, mela_bkg = massage_data(args.vars, "input_files/embed.root", "bkg")
+  print 'Training Statistics ----'
+  print 'No. Signal', sig.shape[0]
+  print 'No. Backg.', bkg.shape[0]
   all_data = pandas.concat([sig, bkg])
   dataset = all_data.values
   data = dataset[:,0:input_length]  ## get numpy array with all input variables
   labels = dataset[:,input_length:]  ## get numpy array with weights and labels
   data_train_val, data_test, label_train_val, label_test = final_formatting(data, labels) ## split/normalize/randomize data
   label_train_val, weights = label_train_val[:,0], label_train_val[:,1]  ## split into labels and weights
-
-  ## if running DY + 2-Jets, set all weights to 1.0
-  if not args.njet:
-    weights = np.array([1. for i in range(len(label_train_val))])
 
   ## build the NN
   model, callbacks = build_nn(args.nhid)

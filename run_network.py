@@ -24,6 +24,7 @@ import h5py
 import json
 import pandas
 from os import environ
+from root_pandas import read_root
 environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Keras import
 from keras.models import Model
 from keras.layers import Input, Activation, Dense
@@ -34,7 +35,7 @@ def putInTree(fname, discs):
   from ROOT import TFile
   from array import array
   fin = TFile(fname, 'update')
-  itree = fin.Get('etau_tree')
+  itree = fin.Get('mutau_tree')
   nentries = itree.GetEntries()
   oname = fname.split('/')[-1].split('.root')[0]
   fout = TFile('output_files/'+oname+'_NN.root', 'recreate')  ## make new file for output
@@ -69,20 +70,13 @@ def build_network(model_name):
 def create_dataframe(variables):
  ## begin section to run a trained NN on all events in a file
   print 'Loading data...'
-  fname = args.input.split('.root')[0]
-  ifile = h5py.File(fname+'.h5', 'r')
+  selection_vars = ['evtwt', 'passSelection', 'Dbkg_VBF']
+  slicer = vars + selection_vars  ## add variables for event selection
+  
+  ## Switch to using root_pandas
+  df = read_root(fname, columns=slicer) 
 
-  selection_vars = ['jeta_1', 'jphi_1', 'jeta_2', 'jphi_2']
-  # remove duplicates
-  selection_vars = [var for var in selection_vars if var not in variables]
-
-  # add event selection variables
-  slicer = tuple(variables) + tuple(selection_vars)
-  branches = ifile["etau_tree"][slicer]
-  df = pandas.DataFrame(branches, columns=slicer)
-  ifile.close()
-
-  df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))
+  #df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))
   # remove unneeded branches from DataFrame
   df = df.drop(selection_vars, axis=1)
   return df
