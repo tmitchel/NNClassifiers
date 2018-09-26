@@ -35,6 +35,7 @@ n_user_inputs = 0
 import h5py
 import pandas
 import numpy as np
+from glob import glob
 from os import environ
 from pprint import pprint
 from root_pandas import read_root
@@ -100,7 +101,7 @@ def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
   from ROOT import TLorentzVector
 
-  print 'Slicing and dicing...', fname.split('.root')[0].split('input_files/')[-1]
+  #print 'Slicing and dicing...', fname.split('.root')[0].split('input_files/')[-1]
   other_vars = ['evtwt', 'passSelection', 'Dbkg_VBF']
   slicer = vars + other_vars  ## add variables for event selection
   
@@ -117,7 +118,7 @@ def massage_data(vars, fname, sample_type):
 
   print 'Begin the slicing'
 
-  qual_cut = (df['Q2V1'] > 0) & (df['passSelection'] > 0) & (df['evtwt'] > 0)
+  qual_cut = (df['passSelection'] > 0) & (df['Q2V1'] > 0)
   df = df[qual_cut]
 
   if 'bkg' in sample_type:
@@ -231,7 +232,9 @@ if __name__ == "__main__":
   ## format the data
   sig, mela_sig = massage_data(args.vars, "input_files/VBF125.root", "sig")
   input_length = sig.shape[1] - 2  ## get shape and remove weight & isSignal
-  bkg, mela_bkg = massage_data(args.vars, "input_files/embed.root", "bkg")
+  bkgs = [ifile for ifile in glob("input_files/DY*.root")]
+  bkg, mela_bkg = massage_data(args.vars, bkgs, "bkg")
+
   print 'Training Statistics ----'
   print 'No. Signal', sig.shape[0]
   print 'No. Backg.', bkg.shape[0]
@@ -255,7 +258,7 @@ if __name__ == "__main__":
                     verbose=args.verbose, # switch to 1 for more verbosity
                     callbacks=callbacks,
                     validation_split=0.25,
-                    sample_weight=weights
+                    #sample_weight=weights
   )
 
   if args.verbose:

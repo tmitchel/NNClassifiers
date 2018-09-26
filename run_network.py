@@ -49,7 +49,7 @@ def putInTree(fname, discs):
   for i in range(nentries):
     if i % 100000 == 0:
       print '{} events of out {} have been processed'.format(i, nentries)
-      adiscs[0] = discs[i][0]
+    adiscs[0] = discs[i][0]
     fout.cd()
     disc_branch.Fill()
 
@@ -71,10 +71,11 @@ def create_dataframe(variables):
  ## begin section to run a trained NN on all events in a file
   print 'Loading data...'
   selection_vars = ['evtwt', 'passSelection', 'Dbkg_VBF']
-  slicer = vars + selection_vars  ## add variables for event selection
+  slicer = variables + selection_vars  ## add variables for event selection
   
   ## Switch to using root_pandas
-  df = read_root(fname, columns=slicer) 
+#  df = read_root(fname, columns=slicer) 
+  df = read_root(args.input, columns=slicer)
 
   #df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))
   # remove unneeded branches from DataFrame
@@ -120,7 +121,7 @@ if __name__ == "__main__":
   ## run the NN and make prediction for all events
   print 'Making predictions...'
   predict = model.predict(data, verbose=args.verbose)
-
+  
   ## put NN discriminant into TTree
   print 'Filling the tree...'
   putInTree(args.input, predict)      
