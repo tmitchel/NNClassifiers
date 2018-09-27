@@ -183,7 +183,9 @@ def massage_data(vars, fname, sample_type):
     df_roc['isSignal'] = np.ones(len(df_roc))
 
   ## make sure the weight is in the correct column
-  weight = df['evtwt']
+  weight = df['evtwt'].values
+  from sklearn.preprocessing import MinMaxScaler
+  weight = MinMaxScaler(feature_range=(0,1)).fit_transform(weight)
   df.insert(loc=df.shape[1], column='weight', value=weight)
   
   ## drop event selection branches from NN input
@@ -210,8 +212,8 @@ if __name__ == "__main__":
   ## format the data
   sig, mela_sig = massage_data(args.vars, "input_files/VBF125.root", "sig")
   input_length = sig.shape[1] - 2  ## get shape and remove weight & isSignal
-  bkgs = [ifile for ifile in glob("input_files/DY*.root")]
-  bkg, mela_bkg = massage_data(args.vars, bkgs, "bkg")
+  #bkgs = [ifile for ifile in glob("input_files/DY*.root")]
+  bkg, mela_bkg = massage_data(args.vars, 'input_files/DY.root', "bkg")
 
   print 'Training Statistics ----'
   print 'No. Signal', sig.shape[0]
@@ -235,7 +237,7 @@ if __name__ == "__main__":
                     batch_size=1024,
                     verbose=args.verbose, # switch to 1 for more verbosity
                     callbacks=callbacks,
-                    validation_split=0.25,
+                    validation_split=0.1,
                     sample_weight=weights
   )
 
