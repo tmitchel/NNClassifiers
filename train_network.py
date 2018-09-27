@@ -24,6 +24,14 @@ parser.add_argument('--dont_save_json', '-d', action='store_true',
                     dest='dont_save_json', default=False,
                     help="don't store NN settings to json"
                     )
+parser.add_argument('--signal', action='store',
+                    dest='signal', default='input_files/VBF125.root',
+                    help='name of the signal file'
+                    )
+parser.add_argument('--background', action='store',
+                    dest='background', default='input_files/DY.root',
+                    help='name of background file'
+                    )
 
 args = parser.parse_args()
 n_user_inputs = 0
@@ -210,10 +218,9 @@ def final_formatting(data, labels):
 
 if __name__ == "__main__":
   ## format the data
-  sig, mela_sig = massage_data(args.vars, "input_files/VBF125.root", "sig")
+  sig, mela_sig = massage_data(args.vars, args.signal, "sig")
   input_length = sig.shape[1] - 2  ## get shape and remove weight & isSignal
-  #bkgs = [ifile for ifile in glob("input_files/DY*.root")]
-  bkg, mela_bkg = massage_data(args.vars, 'input_files/DY.root', "bkg")
+  bkg, mela_bkg = massage_data(args.vars, args.background, "bkg")
 
   print 'Training Statistics ----'
   print 'No. Signal', sig.shape[0]
