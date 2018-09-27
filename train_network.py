@@ -159,10 +159,9 @@ def build_nn(nhid):
 
 def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
-  from ROOT import TLorentzVector
 
   #print 'Slicing and dicing...', fname.split('.root')[0].split('input_files/')[-1]
-  other_vars = ['evtwt', 'cat_vbf', 'Dbkg_VBF']
+  other_vars = ['evtwt', 'cat_inclusive', 'cat_0jet', 'cat_boosted', 'cat_vbf', 'Dbkg_VBF']
   slicer = vars + other_vars  ## add variables for event selection
   
   df = read_root(fname, columns=slicer) ## read only necessary columns

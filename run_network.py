@@ -20,22 +20,21 @@ args = parser.parse_args()
 
 import os
 import sys
-import h5py
 import json
 import pandas
 from os import environ
 from root_pandas import read_root
 environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Keras import
 from keras.models import Model
-from keras.layers import Input, Activation, Dense
+from keras.layers import Input, Dense
 
 ## this function needs serious refactoring
 def putInTree(fname, discs):
   """Function to write a new file copying old TTree and adding NN discriminant"""
   from ROOT import TFile
   from array import array
-  fin = TFile(fname, 'update')
-  itree = fin.Get('mutau_tree')
+  fin = TFile(fname, 'read')
+  itree = fin.Get('mutau_tree') 
   nentries = itree.GetEntries()
   oname = fname.split('/')[-1].split('.root')[0]
   fout = TFile('output_files/'+oname+'_NN.root', 'recreate')  ## make new file for output
@@ -70,16 +69,9 @@ def build_network(model_name):
 def create_dataframe(variables):
  ## begin section to run a trained NN on all events in a file
   print 'Loading data...'
-  selection_vars = ['evtwt', 'passSelection', 'Dbkg_VBF']
-  slicer = variables + selection_vars  ## add variables for event selection
   
-  ## Switch to using root_pandas
-#  df = read_root(fname, columns=slicer) 
-  df = read_root(args.input, columns=slicer)
-
-  #df.insert(loc=0, column='dEtajj', value=abs(df['jeta_1'] - df['jeta_2']))
-  # remove unneeded branches from DataFrame
-  df = df.drop(selection_vars, axis=1)
+  ## read necessary branches from input file
+  df = read_root(args.input, columns=variables)
   return df
 
 def normalize(df):
@@ -100,10 +92,7 @@ if __name__ == "__main__":
   njet       = params['njet']
   nhid       = params['nhidden']
   input_length = len(variables) + params['n_user_inputs']
-
- 
   model_name = 'models/' + model_name + '.hdf5'
-  ## load the NN weights
   if not os.path.exists(model_name):
     print "Can't find trained model: {}".format(model_name)
     print "Please run train_network.py -m {}  to train a model named {}".format(model_name, model_name)
