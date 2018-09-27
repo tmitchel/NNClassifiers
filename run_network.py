@@ -16,6 +16,10 @@ parser.add_argument('--load_json', '-l', action='store',
                     dest='load_json', default='model_store.json',
                     help='name of json file to load model parameters'
                     )
+parser.add_argument('--treename', '-t', action='store',
+                    dest='treename', default='etau_tree',
+                    help='name of the tree to read'
+                    )
 args = parser.parse_args()
 
 import os
@@ -34,7 +38,7 @@ def putInTree(fname, discs):
   from ROOT import TFile
   from array import array
   fin = TFile(fname, 'read')
-  itree = fin.Get('mutau_tree') 
+  itree = fin.Get(args.treename) 
   nentries = itree.GetEntries()
   oname = fname.split('/')[-1].split('.root')[0]
   fout = TFile('output_files/'+oname+'_NN.root', 'recreate')  ## make new file for output
