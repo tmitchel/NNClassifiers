@@ -77,7 +77,6 @@ def create_dataframe(variables):
 def normalize(df):
   """Take a pandas DataFrame and normalize the variables"""
   from sklearn.preprocessing import StandardScaler
-  from sklearn.model_selection import train_test_split
   scaler = StandardScaler().fit(df)
   data_scaled = scaler.transform(df)
   return data_scaled

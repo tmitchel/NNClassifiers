@@ -59,7 +59,7 @@ def build_plots(history, label_test, other=None):
 
   # Plot ROC
   label_predict = model.predict(data_test)
-  fpr, tpr, thresholds = roc_curve(label_test[:, 0], label_predict[:, 0])
+  fpr, tpr = roc_curve(label_test[:, 0], label_predict[:, 0])
   roc_auc = auc(fpr, tpr)
   plt.plot([0, 1], [0, 1], linestyle='--', lw=2,
            color='k', label='random chance')
