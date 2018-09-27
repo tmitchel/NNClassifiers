@@ -88,7 +88,6 @@ if __name__ == "__main__":
 
   model_name = params['model_name']
   variables  = params['variables']
-  njet       = params['njet']
   nhid       = params['nhidden']
   input_length = len(variables) + params['n_user_inputs']
   model_name = 'models/' + model_name + '.hdf5'
