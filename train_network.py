@@ -29,7 +29,7 @@ parser.add_argument('--signal', action='store',
                     help='name of the signal file'
                     )
 parser.add_argument('--background', action='store',
-                    dest='background', default='input_files/DY.root',
+                    dest='background', default='input_files/embed.root',
                     help='name of background file'
                     )
 
@@ -50,7 +50,7 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 ##############################
 ## Just the plotting things ##
 ##############################
-def ROC_curve(data_test, label_test, model):
+def ROC_curve(data_test, label_test, model, other=None):
   import matplotlib.pyplot as plt
   from sklearn.metrics import roc_curve, auc
 
@@ -93,18 +93,21 @@ def trainingPlots(history):
   ax.set_ylabel('acc')
   plt.show()
 
-def discPlot(model, sig, sigLabel, bkg, bkgLabel):
+def discPlot(model, sig, bkg):
   import matplotlib.pyplot as plt
   from sklearn.preprocessing import StandardScaler
+  sig = sig.values[:, 0:input_length]
+  bkg = bkg.values[:, 0:input_length]
+
   sig = StandardScaler().fit_transform(sig)
   bkg = StandardScaler().fit_transform(bkg)
 
   sig_pred = model.predict(sig)
   bkg_pred = model.predict(bkg)
 
-  plt.figure(figsize=(15, 10))
-  plt.hist(sig_pred, color='blue', bins=100)
-  plt.hist(bkg_pred, color='blue', bins=100)
+  plt.figure(figsize=(12, 8))
+  plt.hist(bkg_pred, histtype='step', color='red', bins=100)
+  plt.hist(sig_pred, histtype='step', color='blue', bins=100)
   plt.savefig('disc.pdf')
 
 def MELA_ROC(sig, bkg):
@@ -256,11 +259,11 @@ if __name__ == "__main__":
                     callbacks=callbacks, validation_split=0.1, sample_weight=weights
                     )
 
-  ROC_curve(data_test, label_test, model)
+  ROC_curve(data_test, label_test, model, MELA_ROC(mela_sig, mela_bkg))
 
   if args.verbose:
     trainingPlots(history)
-    discPlot(sig, bkg)
+    discPlot(model, sig, bkg)
 
   if args.dont_save_json:
     pass
