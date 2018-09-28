@@ -50,16 +50,14 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 ##############################
 ## Just the plotting things ##
 ##############################
-def build_plots(history, label_test, other=None):
-  """ do whatever plotting is needed """
+def ROC_curve(data_test, label_test, model):
   import matplotlib.pyplot as plt
   from sklearn.metrics import roc_curve, auc
 
-  plt.figure(figsize=(15, 10))
+  plt.figure(figsize=(15,10))
 
-  # Plot ROC
   label_predict = model.predict(data_test)
-  fpr, tpr = roc_curve(label_test[:, 0], label_predict[:, 0])
+  fpr, tpr, thresholds = roc_curve(label_test[:, 0], label_predict[:, 0])
   roc_auc = auc(fpr, tpr)
   plt.plot([0, 1], [0, 1], linestyle='--', lw=2,
            color='k', label='random chance')
@@ -76,6 +74,8 @@ def build_plots(history, label_test, other=None):
   plt.legend(loc="upper left")
   plt.savefig('plots/'+args.model_name+'.pdf')
 
+def trainingPlots(history):
+  import matplotlib.pyplot as plt
   # plot loss vs epoch
   ax = plt.subplot(2, 1, 1)
   ax.plot(history.history['loss'], label='loss')
@@ -92,6 +92,20 @@ def build_plots(history, label_test, other=None):
   ax.set_xlabel('epoch')
   ax.set_ylabel('acc')
   plt.show()
+
+def discPlot(model, sig, sigLabel, bkg, bkgLabel):
+  import matplotlib.pyplot as plt
+  from sklearn.preprocessing import StandardScaler
+  sig = StandardScaler().fit_transform(sig)
+  bkg = StandardScaler().fit_transform(bkg)
+
+  sig_pred = model.predict(sig)
+  bkg_pred = model.predict(bkg)
+
+  plt.figure(figsize=(15, 10))
+  plt.hist(sig_pred, color='blue', bins=100)
+  plt.hist(bkg_pred, color='blue', bins=100)
+  plt.savefig('disc.pdf')
 
 def MELA_ROC(sig, bkg):
   """ read h5 file and return info for making a ROC curve from MELA disc. """
@@ -237,19 +251,16 @@ if __name__ == "__main__":
     model.summary()
 
   ## train the NN
-  history = model.fit(data_train_val,
-                    label_train_val,
-                    epochs=5000,
-                    batch_size=1024,
-                    verbose=args.verbose, # switch to 1 for more verbosity
-                    callbacks=callbacks,
-                    validation_split=0.1,
-                    sample_weight=weights
-  )
+  history = model.fit(data_train_val, label_train_val,
+                    epochs=5000, batch_size=1024, verbose=args.verbose, # switch to 1 for more verbosity
+                    callbacks=callbacks, validation_split=0.1, sample_weight=weights
+                    )
+
+  ROC_curve(data_test, label_test, model)
 
   if args.verbose:
-    ## produce a ROC curve and other plots
-    build_plots(history, label_test, MELA_ROC(mela_sig, mela_bkg))
+    trainingPlots(history)
+    discPlot(sig, bkg)
 
   if args.dont_save_json:
     pass
