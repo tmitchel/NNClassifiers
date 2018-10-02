@@ -72,7 +72,7 @@ def ROC_curve(data_test, label_test, model, other=None):
   plt.ylabel('false positive rate')
   plt.title('receiver operating curve')
   plt.legend(loc="upper left")
-  plt.savefig('plots/'+args.model_name+'.pdf')
+  plt.savefig('plots/ROC_'+args.model_name+'.pdf')
 
 def trainingPlots(history):
   import matplotlib.pyplot as plt
@@ -91,7 +91,7 @@ def trainingPlots(history):
   ax.legend(loc="upper left")
   ax.set_xlabel('epoch')
   ax.set_ylabel('acc')
-  plt.show()
+  plt.savefig('plots/trainingPlot_'+args.model_name+'.pdf')
 
 def discPlot(model, sig, bkg):
   import matplotlib.pyplot as plt
@@ -106,9 +106,13 @@ def discPlot(model, sig, bkg):
   bkg_pred = model.predict(bkg)
 
   plt.figure(figsize=(12, 8))
-  plt.hist(bkg_pred, histtype='step', color='red', bins=100)
-  plt.hist(sig_pred, histtype='step', color='blue', bins=100)
-  plt.savefig('disc.pdf')
+  plt.title('NN Discriminant')
+  plt.xlabel('NN Disc.')
+  plt.ylabel('Events/Bin')
+  plt.hist(bkg_pred, histtype='step', color='red', label='ZTT', bins=100)
+  plt.hist(sig_pred, histtype='step', color='blue', label='VBF', bins=100)
+  plt.legend()
+  plt.savefig('plots/disc_'+args.model_name+'.pdf')
 
 def MELA_ROC(sig, bkg):
   """ read h5 file and return info for making a ROC curve from MELA disc. """
@@ -178,16 +182,16 @@ def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
 
   #print 'Slicing and dicing...', fname.split('.root')[0].split('input_files/')[-1]
-  other_vars = ['evtwt', 'cat_inclusive', 'cat_0jet', 'cat_boosted', 'cat_vbf', 'Dbkg_VBF']
+  other_vars = ['evtwt', 'cat_inclusive', 'cat_0jet', 'cat_boosted', 'cat_vbf', 'Dbkg_VBF', 'Dbkg_ggH', 'njets', 'higgs_pT', 't1_pt', 'mjj']
   slicer = vars + other_vars  ## add variables for event selection
   
   df = read_root(fname, columns=slicer) ## read only necessary columns
   df_roc = pandas.DataFrame() ## empty dataframe to hold Dbkg_VBF for ROC curve
-  df_roc['Dbkg_VBF'] = df[(df['cat_vbf'] > 0) & (df['Dbkg_VBF'] > 0)]['Dbkg_VBF'] ## get Dbkg_VBF when reasonable and passes selection
+  df_roc['Dbkg_VBF'] = df[(df['cat_vbf'] == 0) & (df['Dbkg_VBF'] > 0)]['Dbkg_VBF'] ## get Dbkg_VBF when reasonable and passes selection
   
   print 'Input data is now in the DataFrame'
 
-  qual_cut = (df['cat_vbf'] > 0) & (df['Q2V1'] > 0) ## make sure event passes selection and has reasonable values
+  qual_cut = (df['Q2V1'] > 0) & (df['cat_vbf'] == 0) ## make sure event passes selection and has reasonable values
   df = df[qual_cut]
 
   if 'bkg' in sample_type:
@@ -254,9 +258,9 @@ if __name__ == "__main__":
     model.summary()
 
   ## train the NN
-  history = model.fit(data_train_val, label_train_val,
+  history = model.fit(data_train_val, label_train_val, shuffle=True,
                     epochs=5000, batch_size=1024, verbose=args.verbose, # switch to 1 for more verbosity
-                    callbacks=callbacks, validation_split=0.1, sample_weight=weights
+                    callbacks=callbacks, validation_split=0.25, sample_weight=weights
                     )
 
   ROC_curve(data_test, label_test, model, MELA_ROC(mela_sig, mela_bkg))
