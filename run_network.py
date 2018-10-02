@@ -48,14 +48,17 @@ def putInTree(fname, discs):
   ntree = itree.CloneTree(-1, 'fast')  ## copy all branches from old tree
   adiscs = array('f', [0.])
   disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')  ## make a new branch to store the disc
-  
-  for i in range(nentries):
-    if i % 100000 == 0:
-      print '{} events of out {} have been processed'.format(i, nentries)
-    adiscs[0] = discs[i][0]
+
+  i = 0
+  for event in itree:
+    if event.cat_vbf > 0 and event.Q2V1 > 0:
+      adiscs[0] = discs[i][0]
+      i += 1
+    else:
+      adiscs[0] = -999
     fout.cd()
     disc_branch.Fill()
-
+  
   fin.Close()
   fout.cd()
   ntree.Write()
@@ -76,14 +79,13 @@ def create_dataframe(variables):
   
   ## read necessary branches from input file
   df = read_root(args.input, columns=variables)
+  df = df[(df['Q2V1'] > 0)]
   return df
 
 def normalize(df):
   """Take a pandas DataFrame and normalize the variables"""
   from sklearn.preprocessing import StandardScaler
-  scaler = StandardScaler().fit(df)
-  data_scaled = scaler.transform(df)
-  return data_scaled
+  return StandardScaler().fit_transform(df.values)
 
 if __name__ == "__main__":
 
