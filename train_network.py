@@ -29,7 +29,7 @@ parser.add_argument('--signal', action='store',
                     help='name of the signal file'
                     )
 parser.add_argument('--background', action='store',
-                    dest='background', default='input_files/DY.root',
+                    dest='background', default='input_files/embed.root',
                     help='name of background file'
                     )
 
@@ -50,14 +50,12 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 ##############################
 ## Just the plotting things ##
 ##############################
-def build_plots(history, label_test, other=None):
-  """ do whatever plotting is needed """
+def ROC_curve(data_test, label_test, model, other=None):
   import matplotlib.pyplot as plt
   from sklearn.metrics import roc_curve, auc
 
-  plt.figure(figsize=(15, 10))
+  plt.figure(figsize=(15,10))
 
-  # Plot ROC
   label_predict = model.predict(data_test)
   fpr, tpr, thresholds = roc_curve(label_test[:, 0], label_predict[:, 0])
   roc_auc = auc(fpr, tpr)
@@ -74,8 +72,10 @@ def build_plots(history, label_test, other=None):
   plt.ylabel('false positive rate')
   plt.title('receiver operating curve')
   plt.legend(loc="upper left")
-  plt.savefig('plots/'+args.model_name+'.pdf')
+  plt.savefig('plots/ROC_'+args.model_name+'.pdf')
 
+def trainingPlots(history):
+  import matplotlib.pyplot as plt
   # plot loss vs epoch
   ax = plt.subplot(2, 1, 1)
   ax.plot(history.history['loss'], label='loss')
@@ -91,7 +91,28 @@ def build_plots(history, label_test, other=None):
   ax.legend(loc="upper left")
   ax.set_xlabel('epoch')
   ax.set_ylabel('acc')
-  plt.show()
+  plt.savefig('plots/trainingPlot_'+args.model_name+'.pdf')
+
+def discPlot(model, sig, bkg):
+  import matplotlib.pyplot as plt
+  from sklearn.preprocessing import StandardScaler
+  sig = sig.values[:, 0:input_length]
+  bkg = bkg.values[:, 0:input_length]
+
+  sig = StandardScaler().fit_transform(sig)
+  bkg = StandardScaler().fit_transform(bkg)
+
+  sig_pred = model.predict(sig)
+  bkg_pred = model.predict(bkg)
+
+  plt.figure(figsize=(12, 8))
+  plt.title('NN Discriminant')
+  plt.xlabel('NN Disc.')
+  plt.ylabel('Events/Bin')
+  plt.hist(bkg_pred, histtype='step', color='red', label='ZTT', bins=100)
+  plt.hist(sig_pred, histtype='step', color='blue', label='VBF', bins=100)
+  plt.legend()
+  plt.savefig('plots/disc_'+args.model_name+'.pdf')
 
 def MELA_ROC(sig, bkg):
   """ read h5 file and return info for making a ROC curve from MELA disc. """
@@ -159,19 +180,18 @@ def build_nn(nhid):
 
 def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
-  from ROOT import TLorentzVector
 
   #print 'Slicing and dicing...', fname.split('.root')[0].split('input_files/')[-1]
-  other_vars = ['evtwt', 'cat_vbf', 'Dbkg_VBF']
+  other_vars = ['evtwt', 'cat_inclusive', 'cat_0jet', 'cat_boosted', 'cat_vbf', 'Dbkg_VBF', 'Dbkg_ggH', 'njets', 'higgs_pT', 't1_pt', 'mjj']
   slicer = vars + other_vars  ## add variables for event selection
   
   df = read_root(fname, columns=slicer) ## read only necessary columns
   df_roc = pandas.DataFrame() ## empty dataframe to hold Dbkg_VBF for ROC curve
-  df_roc['Dbkg_VBF'] = df[(df['cat_vbf'] > 0) & (df['Dbkg_VBF'] > 0)]['Dbkg_VBF'] ## get Dbkg_VBF when reasonable and passes selection
+  df_roc['Dbkg_VBF'] = df[(df['cat_vbf'] == 0) & (df['Dbkg_VBF'] > 0)]['Dbkg_VBF'] ## get Dbkg_VBF when reasonable and passes selection
   
   print 'Input data is now in the DataFrame'
 
-  qual_cut = (df['cat_vbf'] > 0) & (df['Q2V1'] > 0) ## make sure event passes selection and has reasonable values
+  qual_cut = (df['Q2V1'] > 0) & (df['cat_vbf'] == 0) ## make sure event passes selection and has reasonable values
   df = df[qual_cut]
 
   if 'bkg' in sample_type:
@@ -238,19 +258,16 @@ if __name__ == "__main__":
     model.summary()
 
   ## train the NN
-  history = model.fit(data_train_val,
-                    label_train_val,
-                    epochs=5000,
-                    batch_size=1024,
-                    verbose=args.verbose, # switch to 1 for more verbosity
-                    callbacks=callbacks,
-                    validation_split=0.1,
-                    sample_weight=weights
-  )
+  history = model.fit(data_train_val, label_train_val, shuffle=True,
+                    epochs=5000, batch_size=1024, verbose=args.verbose, # switch to 1 for more verbosity
+                    callbacks=callbacks, validation_split=0.25, sample_weight=weights
+                    )
+
+  ROC_curve(data_test, label_test, model, MELA_ROC(mela_sig, mela_bkg))
 
   if args.verbose:
-    ## produce a ROC curve and other plots
-    build_plots(history, label_test, MELA_ROC(mela_sig, mela_bkg))
+    trainingPlots(history)
+    discPlot(model, sig, bkg)
 
   if args.dont_save_json:
     pass
