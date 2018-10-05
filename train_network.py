@@ -187,11 +187,11 @@ def massage_data(vars, fname, sample_type):
   
   df = read_root(fname, columns=slicer) ## read only necessary columns
   df_roc = pandas.DataFrame() ## empty dataframe to hold Dbkg_VBF for ROC curve
-  df_roc['Dbkg_VBF'] = df[(df['cat_vbf'] == 0) & (df['Dbkg_VBF'] > 0)]['Dbkg_VBF'] ## get Dbkg_VBF when reasonable and passes selection
+  df_roc['Dbkg_VBF'] = df[(df['cat_vbf'] > 0) & (df['Dbkg_VBF'] > 0)]['Dbkg_VBF'] ## get Dbkg_VBF when reasonable and passes selection
   
   print 'Input data is now in the DataFrame'
 
-  qual_cut = (df['Q2V1'] > 0) & (df['cat_vbf'] == 0) ## make sure event passes selection and has reasonable values
+  qual_cut = (df['Q2V1'] > 0) & (df['cat_vbf'] > 0) ## make sure event passes selection and has reasonable values
   df = df[qual_cut]
 
   if 'bkg' in sample_type:
