@@ -51,7 +51,7 @@ def putInTree(fname, discs):
 
   i = 0
   for event in itree:
-    if event.cat_vbf > 0 and event.Q2V1 > 0:
+    if event.Q2V1 > 0 and event.cat_vbf > 0 and event.el_charge + event.t1_charge == 0:
       adiscs[0] = discs[i][0]
       i += 1
     else:
@@ -67,6 +67,8 @@ def build_network(model_name):
   print 'Building the network...'
   inputs = Input(shape = (input_length,), name = 'input')
   hidden = Dense(nhid, name = 'hidden', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
+#  hidden1 = Dense(4, name = 'hidden1', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
+#  hidden2 = Dense(4, name = 'hidden2', kernel_initializer = 'normal', activation = 'sigmoid')(hidden1)
   outputs = Dense(1, name = 'output', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
   model = Model(inputs = inputs, outputs = outputs)
   model.load_weights(model_name)
@@ -78,8 +80,9 @@ def create_dataframe(variables):
   print 'Loading data...'
   
   ## read necessary branches from input file
-  df = read_root(args.input, columns=variables)
-  df = df[(df['Q2V1'] > 0)]
+  df = read_root(args.input, columns=(variables + ['cat_vbf', 'el_charge', 't1_charge']))
+  df = df[(df['Q2V1'] > 0) & (df['cat_vbf'] > 0) & (df['el_charge'] + df['t1_charge'] == 0)]
+  df = df.drop(['cat_vbf', 'el_charge', 't1_charge'], axis=1)
   return df
 
 def normalize(df):
