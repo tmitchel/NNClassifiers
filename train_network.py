@@ -93,7 +93,7 @@ def create_json(model_name, nhid, vars):
             {
                 'model_name': model_name,
                 'variables': vars,
-                'nhidden': nhid,
+                'nhidden': nhid[0],
                 'n_user_inputs': len(vars)
             }, fout
         )
@@ -116,11 +116,11 @@ class Classifier:
 
         # add the input layer
         self.model.add(
-            Dense(ninp, input_shape=(ninp,), name='input')
+            Dense(nhid[0], input_shape=(nhid[0],), name='input')
         )
 
         # add hidden layers
-        for i in range(len(nhid)):
+        for i in range(len(nhid)-1):
             self.model.add(
                 Dense(nhid[i], activation='sigmoid', kernel_initializer='normal')
             )
@@ -140,7 +140,7 @@ class Classifier:
         # now add some callbacks
         self.callbacks = [
             EarlyStopping(monitor='val_loss', patience=50),
-            ModelCheckpoint(name+'.hdf5', monitor='val_loss',
+            ModelCheckpoint('models/'+name+'.hdf5', monitor='val_loss',
                             verbose=0, save_best_only=True,
                             save_weights_only=False, mode='auto',
                             period=1
@@ -197,7 +197,7 @@ class Classifier:
 
         # split data into labels and also split into train/test
         data_train, data_test, meta_train, meta_test = train_test_split(
-            self.data[:, :self.ninp], self.data[:, self.ninp:], test_size=0.05, random_state=7, shuffle=True)
+            self.data[:, :self.ninp], self.data[:, self.ninp:], test_size=0.05, random_state=7)
 
         # normalize all input variables to improve performance
         data_train = StandardScaler().fit_transform(data_train)
@@ -249,7 +249,7 @@ if __name__ == "__main__":
                         help='run in verbose mode'
                         )
     parser.add_argument('--nhid', '-n', nargs='+', action='store',
-                        dest='nhid', default=[1, 7], type=int,
+                        dest='nhid', default=[7], type=int,
                         help='[# hidden, ...# nodes in layer]'
                         )
     parser.add_argument('--vars', '-v', nargs='+', action='store',
