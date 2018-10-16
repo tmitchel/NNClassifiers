@@ -116,7 +116,7 @@ class Classifier:
 
         # add the input layer
         self.model.add(
-            Dense(nhid[0], input_shape=(nhid[0],), name='input')
+            Dense(nhid[0], input_shape=(nhid[0],), name='input', activation='sigmoid')
         )
 
         # add hidden layers
