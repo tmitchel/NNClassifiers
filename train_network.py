@@ -7,7 +7,7 @@ def ROC_curve(data_test, label_test, weights, model):
     from sklearn.metrics import roc_curve, auc
 
     label_predict = model.model.predict(data_test) ## use the model to do classifications
-    fpr, tpr, thresholds = roc_curve(
+    fpr, tpr, _ = roc_curve(
         label_test, label_predict[:, 0], sample_weight=weights) ## calculate the ROC curve
     roc_auc = auc(fpr, tpr)
     plt.plot([0, 1], [0, 1], linestyle='--', lw=2,

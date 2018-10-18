@@ -39,7 +39,6 @@ def putInTree(fname, discs):
   from array import array
   fin = TFile(fname, 'read')
   itree = fin.Get(args.treename) 
-  nentries = itree.GetEntries()
   oname = fname.split('/')[-1].split('.root')[0]
   fout = TFile('output_files/'+oname+'_NN.root', 'recreate')  ## make new file for output
   fout.cd()
