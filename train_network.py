@@ -43,6 +43,7 @@ from os import environ
 from pprint import pprint
 from root_pandas import read_root
 environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Keras import
+from keras import optimizers
 from keras.models import Model
 from keras.layers import Input, Dense
 from keras.callbacks import ModelCheckpoint, EarlyStopping
@@ -50,14 +51,12 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 ##############################
 ## Just the plotting things ##
 ##############################
-def ROC_curve(data_test, label_test, model, other=None):
+def ROC_curve(data_test, label_test, weights, model, other=None):
   import matplotlib.pyplot as plt
   from sklearn.metrics import roc_curve, auc
 
-  plt.figure(figsize=(15,10))
-
   label_predict = model.predict(data_test)
-  fpr, tpr, thresholds = roc_curve(label_test[:, 0], label_predict[:, 0])
+  fpr, tpr, thresholds = roc_curve(label_test, label_predict[:, 0], sample_weight=weights)
   roc_auc = auc(fpr, tpr)
   plt.plot([0, 1], [0, 1], linestyle='--', lw=2,
            color='k', label='random chance')
@@ -153,11 +152,13 @@ def build_nn(nhid):
   print 'Building the network...'
   inputs = Input(shape = (input_length,), name = 'input')
   hidden = Dense(nhid, name = 'hidden', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
-  outputs = Dense(1, name = 'output', kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
+#  hidden1 = Dense(4, name = 'hidden1', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
+#  hidden2 = Dense(4, name = 'hidden2', kernel_initializer = 'normal', activation = 'sigmoid')(hidden1)
+  outputs = Dense(1, name = 'output',  kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
   model = Model(inputs = inputs, outputs = outputs)
 
   # early stopping callback
-  early_stopping = EarlyStopping(monitor='val_loss', patience=10)
+  early_stopping = EarlyStopping(monitor='val_loss', patience=50)
 
   if args.model_name != None:
     model_name = args.model_name + '.hdf5'
@@ -174,6 +175,7 @@ def build_nn(nhid):
   callbacks = [early_stopping, model_checkpoint]
 
   ## compile the model and return it with callbacks
+  sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
   model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
   print 'Build complete.'
   return model, callbacks
@@ -182,16 +184,20 @@ def massage_data(vars, fname, sample_type):
   """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
 
   #print 'Slicing and dicing...', fname.split('.root')[0].split('input_files/')[-1]
-  other_vars = ['evtwt', 'cat_inclusive', 'cat_0jet', 'cat_boosted', 'cat_vbf', 'Dbkg_VBF', 'Dbkg_ggH', 'njets', 'higgs_pT', 't1_pt', 'mjj']
+  other_vars = ['evtwt', 'cat_inclusive', 'cat_0jet', 'cat_boosted', 'cat_vbf', 'Dbkg_VBF', 'Dbkg_ggH', 'njets', 'higgs_pT', 't1_pt', 'mjj', 't1_charge', 'el_charge']
   slicer = vars + other_vars  ## add variables for event selection
   
   df = read_root(fname, columns=slicer) ## read only necessary columns
   df_roc = pandas.DataFrame() ## empty dataframe to hold Dbkg_VBF for ROC curve
-  df_roc['Dbkg_VBF'] = df[(df['cat_vbf'] > 0) & (df['Dbkg_VBF'] > 0)]['Dbkg_VBF'] ## get Dbkg_VBF when reasonable and passes selection
+  #df_roc['Dbkg_ggH'] = df[(df['cat_vbf'] == 0) & (df['Dbkg_ggH'] > 0) & (df['njets'] > 1) & (df['el_charge'] + df['t1_charge'] == 0)]['Dbkg_ggH'] ## get Dbkg_ggH when reasonable and passes selection
+  df_roc['Dbkg_VBF'] = df[(df['cat_vbf'] > 0) & (df['Dbkg_VBF'] > 0) & (df['el_charge'] + df['t1_charge'] == 0)]['Dbkg_VBF'] ## get Dbkg_VBF when reasonable and passes selection
+
   
   print 'Input data is now in the DataFrame'
 
-  qual_cut = (df['Q2V1'] > 0) & (df['cat_vbf'] > 0) ## make sure event passes selection and has reasonable values
+  #qual_cut = (df['Q2V1'] > 0) & (df['cat_vbf'] == 0) & (df['el_charge'] + df['t1_charge'] == 0) & (df['njets'] > 1) ## make sure event passes selection and has reasonable values
+  qual_cut = (df['Q2V1'] > 0) & (df['cat_vbf'] > 0) & (df['el_charge'] + df['t1_charge'] == 0) ## make sure event passes selection and has reasonable values
+
   df = df[qual_cut]
 
   if 'bkg' in sample_type:
@@ -251,7 +257,7 @@ if __name__ == "__main__":
   labels = dataset[:,input_length:]  ## get numpy array with weights and labels
   data_train_val, data_test, label_train_val, label_test = final_formatting(data, labels) ## split/normalize/randomize data
   label_train_val, weights = label_train_val[:,0], label_train_val[:,1]  ## split into labels and weights
-
+  
   ## build the NN
   model, callbacks = build_nn(args.nhid)
   if args.verbose:
@@ -263,7 +269,8 @@ if __name__ == "__main__":
                     callbacks=callbacks, validation_split=0.25, sample_weight=weights
                     )
 
-  ROC_curve(data_test, label_test, model, MELA_ROC(mela_sig, mela_bkg))
+#  ROC_curve(data_test, label_test, model, MELA_ROC(mela_sig, mela_bkg))
+  ROC_curve(np.concatenate((data_test, data_train_val), axis=0), np.concatenate((label_test[:,0], label_train_val), axis=0), np.concatenate((label_test[:,1], weights), axis=0) ,model, MELA_ROC(mela_sig, mela_bkg))
 
   if args.verbose:
     trainingPlots(history)
