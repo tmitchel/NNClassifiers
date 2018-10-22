@@ -152,14 +152,14 @@ class Classifier:
         def load(name):
             other_vars = [
                 'evtwt', 'cat_inclusive', 'cat_0jet', 'cat_boosted', 'cat_vbf',
-                'Dbkg_VBF', 'Dbkg_ggH', 'njets', 'higgs_pT', 't1_charge', 'el_charge'
+                'Dbkg_VBF', 'Dbkg_ggH', 'njets', 'higgs_pT', 't1_charge', 'el_charge', 'nbjets', 'mt'
             ]
             slicer = vars + other_vars  # add variables for event selection
             df = read_root(name, columns=slicer)
 
             # apply selection and make sure variables are reasonable
             qual_cut = (df['Q2V1'] > 0) & \
-                       (df['cat_vbf'] > 0) & \
+                       (df['cat_vbf'] > 0) & (df['nbjets'] == 0) & (df['mt'] < 50) & \
                        (df['el_charge'] + df['t1_charge'] == 0)
 
             df = df[qual_cut]
