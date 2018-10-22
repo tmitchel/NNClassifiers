@@ -6,9 +6,9 @@ def ROC_curve(data_test, label_test, weights, model):
     import matplotlib.pyplot as plt
     from sklearn.metrics import roc_curve, auc
 
-    label_predict = model.model.predict(data_test)
-    fpr, tpr, thresholds = roc_curve(
-        label_test, label_predict[:, 0], sample_weight=weights)
+    label_predict = model.model.predict(data_test) ## use the model to do classifications
+    fpr, tpr, _ = roc_curve(
+        label_test, label_predict[:, 0], sample_weight=weights) ## calculate the ROC curve
     roc_auc = auc(fpr, tpr)
     plt.plot([0, 1], [0, 1], linestyle='--', lw=2,
              color='k', label='random chance')
@@ -81,6 +81,11 @@ from keras.layers import Dense
 from keras.callbacks import ModelCheckpoint, EarlyStopping
 
 def create_json(model_name, nhid, vars):
+    """  
+    Save the structure of the model to a JSON file. This file is 
+    read later by run_network.py to create the correct network when 
+    doing the actual classifying 
+    """
     import json
 
     if model_name != None:
@@ -99,6 +104,11 @@ def create_json(model_name, nhid, vars):
         )
 
 class Classifier:
+    """
+    Classifier holds all the data/functions needed from creating and training
+    a network to do binary classification with an arbitrary number of hidden
+    layers in a fully-connected network
+    """
     def __init__(self, name, ninp, nhid):
 
         # initialize data holders
@@ -150,21 +160,21 @@ class Classifier:
     def loadData(self, vars, sig_name, bkg_name):
         # quick function for loading
         def load(name):
+            ## variables to load for selection
             other_vars = [
                 'evtwt', 'cat_inclusive', 'cat_0jet', 'cat_boosted', 'cat_vbf',
                 'Dbkg_VBF', 'Dbkg_ggH', 'njets', 'higgs_pT', 't1_charge', 'el_charge', 'nbjets', 'mt'
             ]
             slicer = vars + other_vars  # add variables for event selection
-            df = read_root(name, columns=slicer)
+            df = read_root(name, columns=slicer) ## only read specified branches from TTree
 
             # apply selection and make sure variables are reasonable
             qual_cut = (df['Q2V1'] > 0) & \
                        (df['cat_vbf'] > 0) & (df['nbjets'] == 0) & (df['mt'] < 50) & \
                        (df['el_charge'] + df['t1_charge'] == 0)
-
             df = df[qual_cut]
 
-            # make sure the weight is in the correct column
+            # make sure the weight is in the correct column and is normalized 
             weight = df['evtwt'].values
             from sklearn.preprocessing import MinMaxScaler
             points = weight.shape[0]
@@ -181,6 +191,7 @@ class Classifier:
         self.sig = load(sig_name)
         self.bkg = load(bkg_name)
 
+        ## add labels to the datasets
         self.sig['isSignal'] = np.ones(len(self.sig))
         self.bkg['isSignal'] = np.zeros(len(self.bkg))
 
@@ -192,8 +203,9 @@ class Classifier:
         from sklearn.preprocessing import StandardScaler
         from sklearn.model_selection import train_test_split
 
+        ## make the combined dataset
         fat_panda = pd.concat([self.sig, self.bkg])
-        self.data = fat_panda.values
+        self.data = fat_panda.values ## convert pandas dataframe -> numpy array
 
         # split data into labels and also split into train/test
         data_train, data_test, meta_train, meta_test = train_test_split(
@@ -202,6 +214,7 @@ class Classifier:
         # normalize all input variables to improve performance
         data_train = StandardScaler().fit_transform(data_train)
 
+        ## separate the event weights and labels
         self.data = data_train
         self.weight = meta_train[:, 0]
         self.label = meta_train[:, 1]
@@ -215,22 +228,31 @@ class Classifier:
 
 
 def main(args):
+    ## build the network
     cl = Classifier(args.model_name, len(args.vars), args.nhid)
+
+    ## load signal and background data
     cl.loadData(args.vars, args.signal, args.background)
+
+    ## build the training dataset
     data_test, meta_test = cl.buildTrainingSet()
 
+    ## train the model and return info from training
     history = cl.trainModel()
 
+    ## make some pretty plots
     ROC_curve(np.concatenate((data_test, cl.data), axis=0),
               np.concatenate((meta_test[:, 1], cl.label), axis=0),
               np.concatenate((meta_test[:, 0], cl.weight), axis=0),
               cl
               )
 
+    ## extra plots
     if args.verbose:
         trainingPlots(history, cl)
         discPlot(cl, cl.sig, cl.bkg)
 
+    ## save network info to be loaded when running
     if args.model_name != None:
         model_name = args.model_name
     else:
@@ -239,6 +261,7 @@ def main(args):
     create_json(model_name, args.nhid, args.vars)
 
 
+## Just read all of the CL arguments then run the main function
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser(
