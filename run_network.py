@@ -41,7 +41,7 @@ def putInTree(fname, discs):
   itree = fin.Get(args.treename) 
   nentries = itree.GetEntries()
   oname = fname.split('/')[-1].split('.root')[0]
-  fout = TFile('output_files/'+oname+'_NN.root', 'recreate')  ## make new file for output
+  fout = TFile('output_files/'+oname+'.root', 'recreate')  ## make new file for output
   fout.cd()
   nevents = fin.Get("nevents").Clone()
   nevents.Write()
@@ -98,7 +98,7 @@ if __name__ == "__main__":
   model_name = params['model_name']
   variables  = params['variables']
   nhid       = params['nhidden']
-  input_length = len(variables) + params['n_user_inputs']
+  input_length = len(variables)
   model_name = 'models/' + model_name + '.hdf5'
   if not os.path.exists(model_name):
     print "Can't find trained model: {}".format(model_name)
