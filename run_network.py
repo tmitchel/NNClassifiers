@@ -33,7 +33,7 @@ from keras.models import Model
 from keras.layers import Input, Dense
 
 ## this function needs serious refactoring
-def putInTree(fname, discs):
+def putInTree(fname, discs, all_discs):
   """Function to write a new file copying old TTree and adding NN discriminant"""
   from ROOT import TFile
   from array import array
@@ -48,13 +48,14 @@ def putInTree(fname, discs):
   adiscs = array('f', [0.])
   disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')  ## make a new branch to store the disc
 
-  i = 0
+  i, j = 0, 0
   for event in itree:
     if event.Q2V1 > 0 and event.cat_vbf > 0 and event.el_charge + event.t1_charge == 0:
-      adiscs[0] = discs[i][0]
-      i += 1
+      adiscs[0] = discs[j][0]
+      j += 1
     else:
-      adiscs[0] = -999
+      adiscs[0] = all_discs[i][0]
+    i += 1
     fout.cd()
     disc_branch.Fill()
   
@@ -80,9 +81,10 @@ def create_dataframe(variables):
   
   ## read necessary branches from input file
   df = read_root(args.input, columns=(variables + ['cat_vbf', 'el_charge', 't1_charge']))
+  all_data = read_root(args.input, columns=(variables))
   df = df[(df['Q2V1'] > 0) & (df['cat_vbf'] > 0) & (df['el_charge'] + df['t1_charge'] == 0)]
   df = df.drop(['cat_vbf', 'el_charge', 't1_charge'], axis=1)
-  return df
+  return df, all_data
 
 def normalize(df):
   """Take a pandas DataFrame and normalize the variables"""
@@ -108,16 +110,18 @@ if __name__ == "__main__":
   model = build_network(model_name)
 
   ## load data and do event selection
-  df = create_dataframe(variables)
+  df, all_df = create_dataframe(variables)
 
   ## normalize the data
   data = normalize(df)
+  all_data = normalize(all_df)
 
   ## run the NN and make prediction for all events
   print 'Making predictions...'
   predict = model.predict(data, verbose=args.verbose)
+  predict_all = model.predict(all_data, verbose=False)
   
   ## put NN discriminant into TTree
   print 'Filling the tree...'
-  putInTree(args.input, predict)      
+  putInTree(args.input, predict, predict_all)      
   print 'Done.'
