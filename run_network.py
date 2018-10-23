@@ -50,7 +50,7 @@ def putInTree(fname, discs, all_discs):
 
   i, j = 0, 0
   for event in itree:
-    if event.Q2V1 > 0 and event.cat_vbf > 0 and event.el_charge + event.t1_charge == 0:
+    if event.Q2V1 > 0 and event.cat_vbf > 0 and event.el_charge + event.t1_charge == 0 and event.nbjets == 0:
       adiscs[0] = discs[j][0]
       j += 1
     else:
@@ -80,10 +80,10 @@ def create_dataframe(variables):
   print 'Loading data...'
   
   ## read necessary branches from input file
-  df = read_root(args.input, columns=(variables + ['cat_vbf', 'el_charge', 't1_charge']))
+  df = read_root(args.input, columns=(variables + ['cat_vbf', 'el_charge', 't1_charge', 'nbjets', 'mjj']))
   all_data = read_root(args.input, columns=(variables))
-  df = df[(df['Q2V1'] > 0) & (df['cat_vbf'] > 0) & (df['el_charge'] + df['t1_charge'] == 0)]
-  df = df.drop(['cat_vbf', 'el_charge', 't1_charge'], axis=1)
+  df = df[(df['Q2V1'] > 0) & (df['cat_vbf'] > 0) & (df['el_charge'] + df['t1_charge'] == 0) & (df['nbjets'] == 0)]
+  df = df.drop(['cat_vbf', 'el_charge', 't1_charge', 'nbjets', 'mjj'], axis=1)
   return df, all_data
 
 def normalize(df):
