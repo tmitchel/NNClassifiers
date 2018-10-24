@@ -1,287 +1,294 @@
-#!/usr/bin/env python
-
-from argparse import ArgumentParser
-parser = ArgumentParser(
-  description = "Train two-layer neural network to separate Drell-Yan + jets from VBF Higgs to tau-tau"
-  )
-parser.add_argument('--verbose', action='store_true',
-                    dest='verbose', default=False,
-                    help='run in verbose mode'
-                    )
-parser.add_argument('--nhid', '-n', action='store',
-                    dest='nhid', default=5, type=int,
-                    help='number of hidden nodes in network'
-                    )
-parser.add_argument('--vars', '-v', nargs='+', action='store',
-                    dest='vars', default=['Q2V1', 'Q2V2'],
-                    help='variables to input to network'
-                    )
-parser.add_argument('--model_name', '-m', action='store',
-                    dest='model_name', default=None,
-                    help='name of a trained model'
-                    )
-parser.add_argument('--dont_save_json', '-d', action='store_true',
-                    dest='dont_save_json', default=False,
-                    help="don't store NN settings to json"
-                    )
-parser.add_argument('--signal', action='store',
-                    dest='signal', default='input_files/VBF125.root',
-                    help='name of the signal file'
-                    )
-parser.add_argument('--background', action='store',
-                    dest='background', default='input_files/embed.root',
-                    help='name of background file'
-                    )
-
-args = parser.parse_args()
-n_user_inputs = 0
-
-import pandas
-import numpy as np
-from glob import glob
-from os import environ
-from pprint import pprint
-from root_pandas import read_root
-environ['KERAS_BACKEND'] = 'tensorflow'  ## on Wisc machine, must be before Keras import
-from keras import optimizers
-from keras.models import Model
-from keras.layers import Input, Dense
-from keras.callbacks import ModelCheckpoint, EarlyStopping
-
 ##############################
 ## Just the plotting things ##
 ##############################
-def ROC_curve(data_test, label_test, weights, model, other=None):
-  import matplotlib.pyplot as plt
-  from sklearn.metrics import roc_curve, auc
 
-  label_predict = model.predict(data_test)
-  fpr, tpr, thresholds = roc_curve(label_test, label_predict[:, 0], sample_weight=weights)
-  roc_auc = auc(fpr, tpr)
-  plt.plot([0, 1], [0, 1], linestyle='--', lw=2,
-           color='k', label='random chance')
-  plt.plot(tpr, fpr, lw=2, color='cyan', label='NN auc = %.3f' % (roc_auc))
-  if other != None:
-    fpr2, tpr2, thresholds2, roc_auc2 = other
-    plt.plot(tpr2, fpr2, lw=2, color='red',
-             label='MELA auc = %.3f' % (roc_auc2))
-  plt.xlim([0, 1.0])
-  plt.ylim([0, 1.0])
-  plt.xlabel('true positive rate')
-  plt.ylabel('false positive rate')
-  plt.title('receiver operating curve')
-  plt.legend(loc="upper left")
-  plt.savefig('plots/ROC_'+args.model_name+'.pdf')
+def ROC_curve(data_test, label_test, weights, model):
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import roc_curve, auc
 
-def trainingPlots(history):
-  import matplotlib.pyplot as plt
-  # plot loss vs epoch
-  ax = plt.subplot(2, 1, 1)
-  ax.plot(history.history['loss'], label='loss')
-  ax.plot(history.history['val_loss'], label='val_loss')
-  ax.legend(loc="upper right")
-  ax.set_xlabel('epoch')
-  ax.set_ylabel('loss')
+    label_predict = model.model.predict(data_test) ## use the model to do classifications
+    fpr, tpr, _ = roc_curve(
+        label_test, label_predict[:, 0], sample_weight=weights) ## calculate the ROC curve
+    roc_auc = auc(fpr, tpr)
+    plt.plot([0, 1], [0, 1], linestyle='--', lw=2,
+             color='k', label='random chance')
+    plt.plot(tpr, fpr, lw=2, color='cyan', label='NN auc = %.3f' % (roc_auc))
+    plt.xlim([0, 1.0])
+    plt.ylim([0, 1.0])
+    plt.xlabel('true positive rate')
+    plt.ylabel('false positive rate')
+    plt.title('receiver operating curve')
+    plt.legend(loc="upper left")
+    plt.grid()
+    plt.savefig('plots/ROC_'+model.name+'.pdf')
 
-  # plot accuracy vs epoch
-  ax = plt.subplot(2, 1, 2)
-  ax.plot(history.history['acc'], label='acc')
-  ax.plot(history.history['val_acc'], label='val_acc')
-  ax.legend(loc="upper left")
-  ax.set_xlabel('epoch')
-  ax.set_ylabel('acc')
-  plt.savefig('plots/trainingPlot_'+args.model_name+'.pdf')
+
+def trainingPlots(history, model):
+    import matplotlib.pyplot as plt
+    # plot loss vs epoch
+    ax = plt.subplot(2, 1, 1)
+    ax.plot(history.history['loss'], label='loss')
+    ax.plot(history.history['val_loss'], label='val_loss')
+    ax.legend(loc="upper right")
+    ax.set_xlabel('epoch')
+    ax.set_ylabel('loss')
+
+    # plot accuracy vs epoch
+    ax = plt.subplot(2, 1, 2)
+    ax.plot(history.history['acc'], label='acc')
+    ax.plot(history.history['val_acc'], label='val_acc')
+    ax.legend(loc="upper left")
+    ax.set_xlabel('epoch')
+    ax.set_ylabel('acc')
+    plt.savefig('plots/trainingPlot_'+model.name+'.pdf')
+
 
 def discPlot(model, sig, bkg):
-  import matplotlib.pyplot as plt
-  from sklearn.preprocessing import StandardScaler
-  sig = sig.values[:, 0:input_length]
-  bkg = bkg.values[:, 0:input_length]
+    import matplotlib.pyplot as plt
+    from sklearn.preprocessing import StandardScaler
+    sig = sig.values[:, 0:model.ninp]
+    bkg = bkg.values[:, 0:model.ninp]
 
-  sig = StandardScaler().fit_transform(sig)
-  bkg = StandardScaler().fit_transform(bkg)
+    sig = StandardScaler().fit_transform(sig)
+    bkg = StandardScaler().fit_transform(bkg)
 
-  sig_pred = model.predict(sig)
-  bkg_pred = model.predict(bkg)
+    sig_pred = model.model.predict(sig)
+    bkg_pred = model.model.predict(bkg)
 
-  plt.figure(figsize=(12, 8))
-  plt.title('NN Discriminant')
-  plt.xlabel('NN Disc.')
-  plt.ylabel('Events/Bin')
-  plt.hist(bkg_pred, histtype='step', color='red', label='ZTT', bins=100)
-  plt.hist(sig_pred, histtype='step', color='blue', label='VBF', bins=100)
-  plt.legend()
-  plt.savefig('plots/disc_'+args.model_name+'.pdf')
-
-def MELA_ROC(sig, bkg):
-  """ read h5 file and return info for making a ROC curve from MELA disc. """
-  from sklearn.metrics import roc_curve, auc
-  all_data = pandas.concat([sig, bkg])
-  dataset = all_data.values
-  data = dataset[:, 0:1]  # read Dbkg_VBF for all events
-  labels = dataset[:, -1]  # read labels for all events
-  fpr, tpr, thresholds = roc_curve(labels, data[:, 0])
-  roc_auc = auc(fpr, tpr)  # calculate Area Under Curve
-  return fpr, tpr, thresholds, roc_auc
+    plt.figure(figsize=(12, 8))
+    plt.title('NN Discriminant')
+    plt.xlabel('NN Disc.')
+    plt.ylabel('Events/Bin')
+    plt.hist(bkg_pred, histtype='step', color='red', label='ZTT', bins=100)
+    plt.hist(sig_pred, histtype='step', color='blue', label='VBF', bins=100)
+    plt.legend()
+    plt.savefig('plots/disc_'+model.name+'.pdf')
 
 ##############################
 ## End the plotting things  ##
 ##############################
 
-def create_json(model_name):
-  import json
+import numpy as np
+import pandas as pd
+from glob import glob
+from os import environ
+from root_pandas import read_root
+# on Wisc machine, must be before Keras import
+environ['KERAS_BACKEND'] = 'tensorflow'
+from keras import optimizers
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.callbacks import ModelCheckpoint, EarlyStopping
 
-  if args.model_name != None:
-    fname = args.model_name + '.json'
-  else:
-    fname = 'model_store.json'
+def create_json(model_name, nhid, vars):
+    """  
+    Save the structure of the model to a JSON file. This file is 
+    read later by run_network.py to create the correct network when 
+    doing the actual classifying 
+    """
+    import json
 
-  with open('model_params/'+fname, 'w') as fout:
-    json.dump(
-      {
-        'model_name': model_name,
-        'variables': args.vars,
-        'nhidden': args.nhid,
-        'n_user_inputs': int(n_user_inputs) 
-      }, fout
-    ) 
-
-def build_nn(nhid):
-  """ Build and return the model with callback functions """
-
-  print 'Building the network...'
-  inputs = Input(shape = (input_length,), name = 'input')
-  hidden = Dense(nhid, name = 'hidden', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
-#  hidden1 = Dense(4, name = 'hidden1', kernel_initializer = 'normal', activation = 'sigmoid')(inputs)
-#  hidden2 = Dense(4, name = 'hidden2', kernel_initializer = 'normal', activation = 'sigmoid')(hidden1)
-  outputs = Dense(1, name = 'output',  kernel_initializer = 'normal', activation = 'sigmoid')(hidden)
-  model = Model(inputs = inputs, outputs = outputs)
-
-  # early stopping callback
-  early_stopping = EarlyStopping(monitor='val_loss', patience=50)
-
-  if args.model_name != None:
-    model_name = args.model_name + '.hdf5'
-  else:
-    model_name = 'NN_model.hdf5'
-
-  model_name = 'models/' + model_name
-
-  # model checkpoint callback
-  model_checkpoint = ModelCheckpoint(model_name, monitor='val_loss',
-                      verbose=0, save_best_only=True,
-                      save_weights_only=False, mode='auto',
-                      period=1)
-  callbacks = [early_stopping, model_checkpoint]
-
-  ## compile the model and return it with callbacks
-  sgd = optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-  model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-  print 'Build complete.'
-  return model, callbacks
-
-def massage_data(vars, fname, sample_type):
-  """ read input h5 file, slice out unwanted data, return DataFrame with variables and one-hot """
-
-  #print 'Slicing and dicing...', fname.split('.root')[0].split('input_files/')[-1]
-  other_vars = ['evtwt', 'cat_inclusive', 'cat_0jet', 'cat_boosted', 'cat_vbf', 'Dbkg_VBF', 'Dbkg_ggH', 'njets', 'higgs_pT', 't1_pt', 'mjj', 't1_charge', 'el_charge']
-  slicer = vars + other_vars  ## add variables for event selection
-  
-  df = read_root(fname, columns=slicer) ## read only necessary columns
-  df_roc = pandas.DataFrame() ## empty dataframe to hold Dbkg_VBF for ROC curve
-  #df_roc['Dbkg_ggH'] = df[(df['cat_vbf'] == 0) & (df['Dbkg_ggH'] > 0) & (df['njets'] > 1) & (df['el_charge'] + df['t1_charge'] == 0)]['Dbkg_ggH'] ## get Dbkg_ggH when reasonable and passes selection
-  df_roc['Dbkg_VBF'] = df[(df['cat_vbf'] > 0) & (df['Dbkg_VBF'] > 0) & (df['el_charge'] + df['t1_charge'] == 0)]['Dbkg_VBF'] ## get Dbkg_VBF when reasonable and passes selection
-
-  
-  print 'Input data is now in the DataFrame'
-
-  #qual_cut = (df['Q2V1'] > 0) & (df['cat_vbf'] == 0) & (df['el_charge'] + df['t1_charge'] == 0) & (df['njets'] > 1) ## make sure event passes selection and has reasonable values
-  qual_cut = (df['Q2V1'] > 0) & (df['cat_vbf'] > 0) & (df['el_charge'] + df['t1_charge'] == 0) ## make sure event passes selection and has reasonable values
-
-  df = df[qual_cut]
-
-  if 'bkg' in sample_type:
-
-    ## format background DataFrame for NN input
-    df['isSignal'] = np.zeros(len(df))  ## put label in DataFrame (bkg=0)
-
-    ## format bkg DataFrame for MELA ROC curve
-    df_roc['isSignal'] = np.zeros(len(df_roc))
-
-  else:
-
-    ## format signal DataFrame for NN input
-    df['isSignal'] = np.ones(len(df))  ## put label in DataFrame (sig=1)
-
-    ## format bkg DataFrame for MELA ROC curve
-    df_roc['isSignal'] = np.ones(len(df_roc))
-
-  ## make sure the weight is in the correct column
-  weight = df['evtwt'].values
-  from sklearn.preprocessing import MinMaxScaler
-  weight = MinMaxScaler(feature_range=(0,1)).fit_transform(weight)
-  df.insert(loc=df.shape[1], column='weight', value=weight)
-  
-  ## drop event selection branches from NN input
-  df = df.drop(other_vars, axis=1)
-  return df, df_roc
-
-def final_formatting(data, labels):
-  """ split data into testing and validation then scale and return collections """
-  from sklearn.preprocessing import StandardScaler
-  from sklearn.model_selection import train_test_split
-
-  ## split data into labels and also split into train/test
-  data_train_val, data_test, label_train_val, label_test = train_test_split(data, labels, test_size=0.2, random_state=7)
-
-  ## normalize all input variables to improve performance
-  scaler = StandardScaler().fit(data_train_val)
-  data_train_val = scaler.transform(data_train_val)
-  data_test = scaler.transform(data_test)
-
-  ## return the same that train_test_split does, but normalized
-  return data_train_val, data_test, label_train_val, label_test
-
-if __name__ == "__main__":
-  ## format the data
-  sig, mela_sig = massage_data(args.vars, args.signal, "sig")
-  input_length = sig.shape[1] - 2  ## get shape and remove weight & isSignal
-  bkg, mela_bkg = massage_data(args.vars, args.background, "bkg")
-
-  print 'Training Statistics ----'
-  print 'No. Signal', sig.shape[0]
-  print 'No. Backg.', bkg.shape[0]
-  all_data = pandas.concat([sig, bkg])
-  dataset = all_data.values
-  data = dataset[:,0:input_length]  ## get numpy array with all input variables
-  labels = dataset[:,input_length:]  ## get numpy array with weights and labels
-  data_train_val, data_test, label_train_val, label_test = final_formatting(data, labels) ## split/normalize/randomize data
-  label_train_val, weights = label_train_val[:,0], label_train_val[:,1]  ## split into labels and weights
-  
-  ## build the NN
-  model, callbacks = build_nn(args.nhid)
-  if args.verbose:
-    model.summary()
-
-  ## train the NN
-  history = model.fit(data_train_val, label_train_val, shuffle=True,
-                    epochs=5000, batch_size=1024, verbose=args.verbose, # switch to 1 for more verbosity
-                    callbacks=callbacks, validation_split=0.25, sample_weight=weights
-                    )
-
-#  ROC_curve(data_test, label_test, model, MELA_ROC(mela_sig, mela_bkg))
-  ROC_curve(np.concatenate((data_test, data_train_val), axis=0), np.concatenate((label_test[:,0], label_train_val), axis=0), np.concatenate((label_test[:,1], weights), axis=0) ,model, MELA_ROC(mela_sig, mela_bkg))
-
-  if args.verbose:
-    trainingPlots(history)
-    discPlot(model, sig, bkg)
-
-  if args.dont_save_json:
-    pass
-  else:
-    if args.model_name != None:
-      model_name = args.model_name
+    if model_name != None:
+        fname = model_name + '.json'
     else:
-      model_name = 'NN_model'
+        fname = 'model_store.json'
 
-    create_json(model_name)
+    with open('model_params/'+fname, 'w') as fout:
+        json.dump(
+            {
+                'model_name': model_name,
+                'variables': vars,
+                'nhidden': nhid[0],
+                'n_user_inputs': len(vars)
+            }, fout
+        )
+
+class Classifier:
+    """
+    Classifier holds all the data/functions needed from creating and training
+    a network to do binary classification with an arbitrary number of hidden
+    layers in a fully-connected network
+    """
+    def __init__(self, name, ninp, nhid):
+
+        # initialize data holders
+        self.name = name
+        self.ninp = ninp
+        self.sig = pd.DataFrame()
+        self.bkg = pd.DataFrame()
+        self.data = NotImplemented
+        self.label = NotImplemented
+        self.weight = NotImplemented
+        self.callbacks = NotImplemented
+
+        # first, build the model
+        self.model = Sequential()
+
+        # add the input layer
+        self.model.add(
+            Dense(nhid[0], input_shape=(nhid[0],), name='input', activation='sigmoid')
+        )
+
+        # add hidden layers
+        for i in range(len(nhid)-1):
+            self.model.add(
+                Dense(nhid[i], activation='sigmoid', kernel_initializer='normal')
+            )
+
+        # last, add output layer
+        self.model.add(
+            Dense(1, activation='sigmoid', kernel_initializer='normal')
+        )
+
+        # print information while training
+        self.model.summary()
+
+        # then, compile the model
+        self.model.compile(optimizer='adam', loss='binary_crossentropy',
+                           metrics=['accuracy'])
+
+        # now add some callbacks
+        self.callbacks = [
+            EarlyStopping(monitor='val_loss', patience=50),
+            ModelCheckpoint('models/'+name+'.hdf5', monitor='val_loss',
+                            verbose=0, save_best_only=True,
+                            save_weights_only=False, mode='auto',
+                            period=1
+                            )
+        ]
+
+    def loadData(self, vars, sig_name, bkg_name):
+        # quick function for loading
+        def load(name):
+            ## variables to load for selection
+            other_vars = [
+                'evtwt', 'cat_inclusive', 'cat_0jet', 'cat_boosted', 'cat_vbf',
+                'Dbkg_VBF', 'Dbkg_ggH', 'njets', 'higgs_pT', 't1_charge', 'el_charge', 'nbjets', 'mt'
+            ]
+            slicer = vars + other_vars  # add variables for event selection
+            df = read_root(name, columns=slicer) ## only read specified branches from TTree
+
+            # apply selection and make sure variables are reasonable
+            qual_cut = (df['Q2V1'] > 0) & \
+                       (df['cat_vbf'] > 0) & (df['nbjets'] == 0) & (df['mt'] < 50) & \
+                       (df['el_charge'] + df['t1_charge'] == 0)
+            df = df[qual_cut]
+
+            # make sure the weight is in the correct column and is normalized 
+            weight = df['evtwt'].values
+            from sklearn.preprocessing import MinMaxScaler
+            points = weight.shape[0]
+            weight = weight.reshape(-1, 1)
+            weight = MinMaxScaler(feature_range=(0, 1)).fit_transform(weight)
+            weight = weight.reshape(points, -1)
+            df.insert(loc=df.shape[1], column='weight', value=weight)
+
+            # remove un-needed columns
+            df = df.drop(other_vars, axis=1)
+
+            return df
+
+        self.sig = load(sig_name)
+        self.bkg = load(bkg_name)
+
+        ## add labels to the datasets
+        self.sig['isSignal'] = np.ones(len(self.sig))
+        self.bkg['isSignal'] = np.zeros(len(self.bkg))
+
+        print 'Training Statistics ----'
+        print 'No. Signal', self.sig.shape[0]
+        print 'No. Backg.', self.bkg.shape[0]
+
+    def buildTrainingSet(self):
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.model_selection import train_test_split
+
+        ## make the combined dataset
+        fat_panda = pd.concat([self.sig, self.bkg])
+        self.data = fat_panda.values ## convert pandas dataframe -> numpy array
+
+        # split data into labels and also split into train/test
+        data_train, data_test, meta_train, meta_test = train_test_split(
+            self.data[:, :self.ninp], self.data[:, self.ninp:], test_size=0.05, random_state=7)
+
+        # normalize all input variables to improve performance
+        data_train = StandardScaler().fit_transform(data_train)
+
+        ## separate the event weights and labels
+        self.data = data_train
+        self.weight = meta_train[:, 0]
+        self.label = meta_train[:, 1]
+        return data_test, meta_test
+
+    def trainModel(self):
+        return self.model.fit(self.data, self.label, shuffle=True,
+                      epochs=10000, batch_size=1024, verbose=True,
+                      callbacks=self.callbacks, validation_split=0.25, sample_weight=self.weight
+                      )
+
+
+def main(args):
+    ## build the network
+    cl = Classifier(args.model_name, len(args.vars), args.nhid)
+
+    ## load signal and background data
+    cl.loadData(args.vars, args.signal, args.background)
+
+    ## build the training dataset
+    data_test, meta_test = cl.buildTrainingSet()
+
+    ## train the model and return info from training
+    history = cl.trainModel()
+
+    ## make some pretty plots
+    ROC_curve(np.concatenate((data_test, cl.data), axis=0),
+              np.concatenate((meta_test[:, 1], cl.label), axis=0),
+              np.concatenate((meta_test[:, 0], cl.weight), axis=0),
+              cl
+              )
+
+    ## extra plots
+    if args.verbose:
+        trainingPlots(history, cl)
+        discPlot(cl, cl.sig, cl.bkg)
+
+    ## save network info to be loaded when running
+    if args.model_name != None:
+        model_name = args.model_name
+    else:
+        model_name = 'NN_model'
+
+    create_json(model_name, args.nhid, args.vars)
+
+
+## Just read all of the CL arguments then run the main function
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+    parser = ArgumentParser(
+        description="Train two-layer neural network to separate Drell-Yan + jets from VBF Higgs to tau-tau"
+    )
+    parser.add_argument('--verbose', action='store_true',
+                        dest='verbose', default=False,
+                        help='run in verbose mode'
+                        )
+    parser.add_argument('--nhid', '-n', nargs='+', action='store',
+                        dest='nhid', default=[7], type=int,
+                        help='[# hidden, ...# nodes in layer]'
+                        )
+    parser.add_argument('--vars', '-v', nargs='+', action='store',
+                        dest='vars', default=['Q2V1', 'Q2V2'],
+                        help='variables to input to network'
+                        )
+    parser.add_argument('--model_name', '-m', action='store',
+                        dest='model_name', default=None,
+                        help='name of a trained model'
+                        )
+    parser.add_argument('--signal', action='store',
+                        dest='signal', default='input_files/VBF125.root',
+                        help='name of the signal file'
+                        )
+    parser.add_argument('--background', action='store',
+                        dest='background', default='input_files/embed.root',
+                        help='name of background file'
+                        )
+    main(parser.parse_args())
