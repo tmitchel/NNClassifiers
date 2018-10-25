@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from glob import glob
 from os import environ
-from root_pandas import read_root
 # on Wisc machine, must be before Keras import
 environ['KERAS_BACKEND'] = 'tensorflow'
 from keras import optimizers
@@ -90,6 +89,8 @@ class Classifier:
 
     def loadData(self, vars, sig_name, bkg_name):
         # quick function for loading
+        from root_pandas import read_root
+
         def load(name):
             ## variables to load for selection
             other_vars = [
