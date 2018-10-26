@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main(args):
-    data = pd.HDFStore('{}.h5'.format(args.input))['df']
+    data = pd.HDFStore('datasets/{}.h5'.format(args.input))['df']
 
     model = Sequential()
     model.add(Dense(7, input_shape=(7,), name='input', activation='sigmoid'))
@@ -20,7 +20,7 @@ def main(args):
     ## build callbacks
     callbacks = [
         EarlyStopping(monitor='val_loss', patience=50),
-        ModelCheckpoint('{}.hdf5'.format(args.model), monitor='val_loss',
+        ModelCheckpoint('models/{}.hdf5'.format(args.model), monitor='val_loss',
                         verbose=0, save_best_only=True,
                         save_weights_only=False, mode='auto',
                         period=1

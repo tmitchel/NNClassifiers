@@ -1,10 +1,10 @@
 #!/usr/bin bash
 
 cd ..
-if [ ! -d "$pyenv" ]; then
-  virtualenv pyenv # setup virtual enviroment
+if [ ! -d "$.pyenv" ]; then
+  virtualenv .pyenv # setup virtual enviroment
 fi
-source pyenv/bin/activate # activate.csh for tcsh
+source .pyenv/bin/activate # activate.csh for tcsh
 eval `scramv1 runtime -sh` # cmsenv
 
 pip install matplotlib

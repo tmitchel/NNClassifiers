@@ -78,14 +78,14 @@ def main(args):
     skinny_boi['evtwt'] = pd.Series(weight_boi)
 
     ## save the dataframe for later
-    store = pd.HDFStore('{}.h5'.format(args.output))
+    store = pd.HDFStore('datasets/{}.h5'.format(args.output))
     store['df'] = skinny_boi
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument('--input', '-i', action='store', dest='input_dir',
-                        default='input_files/etau_stable_Oct24/', help='path to input files'
+                        default='root_files/etau_stable_Oct24/', help='path to input files'
                         )
     parser.add_argument('--output', '-o', action='store', dest='output',
                         default='store.h5', help='name of output file'
