@@ -6,3 +6,6 @@ pyenv
 ***/*.json
 ***/*.hdf5
 .DS_Store
+***/*.pyc
+notebooks/.ipynb_checkpoints/
+.ipynb_checkpoints/
