@@ -10,24 +10,24 @@ def loadFile(ifile):
     print 'Loading input file...', filename
 
     ## Variables used for selection. These shouldn't be normalized
-    # selection_vars = [
-    #     'cat_vbf', 'el_charge', 't1_charge', 'nbjets', 'el_iso', 't1_tightIso', 't1_mediumIso'
-    # ]
     selection_vars = [
-        'cat_vbf', 't1_charge', 'nbjets', 'mu_charge', 'cat_qcd'
+        'cat_vbf', 'el_charge', 't1_charge', 'nbjets', 'el_iso', 't1_tightIso', 't1_mediumIso'
     ]
+    # selection_vars = [
+    #     'cat_vbf', 't1_charge', 'nbjets', 'mu_charge', 'cat_qcd'
+    # ]
 
     ## Variables that could be used as NN input. These should be normalized
-    # scaled_vars = [
-    #     'evtwt', 'mt', 'njets',
-    #     'mjj', 'dEtajj', 'm_sv', 'pt_sv', 'el_pt', 't1_pt', 'mu_pt', 't2_pt', 'hjj_pT', 'higgs_pT',
-    #     'Dbkg_VBF', 'Dbkg_ggH', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar'
-    # ]
     scaled_vars = [
-        'evtwt', 'mt', 'njets', 
-        'mjj', 'dEtajj', 'm_sv', 'pt_sv', 't1_pt', 'mu_pt', 'hjj_pT', 'higgs_pT',
+        'evtwt', 'mt', 'njets',
+        'mjj', 'dEtajj', 'm_sv', 'pt_sv', 'el_pt', 't1_pt', 'mu_pt', 't2_pt', 'hjj_pT', 'higgs_pT',
         'Dbkg_VBF', 'Dbkg_ggH', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar'
     ]
+    # scaled_vars = [
+    #     'evtwt', 'mt', 'njets', 
+    #     'mjj', 'dEtajj', 'm_sv', 'pt_sv', 't1_pt', 'mu_pt', 'hjj_pT', 'higgs_pT',
+    #     'Dbkg_VBF', 'Dbkg_ggH', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar'
+    # ]
 
     input_df = read_root(ifile, columns=scaled_vars+selection_vars) ## read from TTrees into DataFrame
     slim_df = input_df[(input_df['njets'] > 1) & (input_df['mjj'] > 300) & (input_df['mt'] < 50)] ## preselection

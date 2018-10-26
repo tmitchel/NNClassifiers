@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main(args):
-    data = pd.HDFStore('datasets/{}.h5'.format(args.input))['df']
+    data = pd.HDFStore(args.input)['df']
 
     model = Sequential()
     model.add(Dense(7, input_shape=(7,), name='input', activation='sigmoid'))

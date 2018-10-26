@@ -6,7 +6,7 @@ from keras.models import load_model
 
 def main(args):
     model = load_model('models/{}.hdf5'.format(args.model))
-    data = pd.HDFStore('datasets/{}.h5'.format(args.input))['df']
+    data = pd.HDFStore(args.input_name)['df']
 
     file_names = [ifile for ifile in glob('{}/*.root'.format(args.input_dir))]
 
