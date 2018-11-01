@@ -10,7 +10,7 @@ The script responsible for preprocessing the data is aptly named `preprocess.py`
 
 The preprocessing script allows users to combine any permutation of three decay channels (et, mt, tt) through the use of flags. The command below will create a DataFrame named `testData.hdf5` containing events from all 3 decay channels. 
 
-```python
+```
 python preprocess.py --el-input root_files/etau --mu-input root_files/mutau --tau-input root_files/taufiles -o testData
 ```
 
@@ -25,7 +25,7 @@ Data will be split into training, validation, and testing datasets. 10% of the e
 
 Input samples can be provided from the command-line. All possible options can be shown with `python train.py -h`. In the example below, a network trained to separate VBF125 from ZTT is trained using the DataFrame produced in the preprocessing step. The output model is named `outputModel.hdf5` and stored in the `models` directory.
 
-```python
+```
 python train.py --signal VBF125 --background ZTT --input datasets/testData.hdf5 --model outputModel
 ```
 
@@ -34,7 +34,7 @@ Training the classifier also results in multiple output pdfs in the `plots` dire
 ## 3.) Classifying
 Once the model is trained, the `classify.py` script is used to apply the classifier and store the results in a copy of the input ROOT files. The output will be stored in a new branch named `NN_disc`. To complete the examples, apply the classifier trained in step 2 to all ROOT files in the et directory.
 
-```python
+```
 python classify.py --treename etau_tree --input datasets/testData.hdf5 --dir root_files/etau --model models/outputModel.hdf5
 ```
 
