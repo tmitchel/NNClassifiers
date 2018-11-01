@@ -1,3 +1,4 @@
+import sys
 import ROOT as rt
 import pandas as pd
 from glob import glob
@@ -6,14 +7,26 @@ from keras.models import load_model
 
 def main(args):
     model = load_model('models/{}.hdf5'.format(args.model))
-    data = pd.HDFStore('datasets/{}.h5'.format(args.input))['df']
+    data = pd.HDFStore(args.input_name)['df']
 
     file_names = [ifile for ifile in glob('{}/*.root'.format(args.input_dir))]
+    if args.treename == 'mutau_tree':
+        channel = 'mt'
+    elif args.treename == 'etau_tree':
+        channel = 'et'
+    elif args.treename == 'tt_tree':
+        channel = 'tt'
+    else:
+        print 'Hey. Bad channel. No. Try again.'
+        sys.exit(1)
+
 
     for ifile in file_names:
-        print 'Processing file: {}'.format(ifile.split('/')[-1].split('.root')[0])
+        fname = ifile.split('/')[-1].split('.root')[0]
+        print 'Processing file: {}'.format(fname)
+
         ## get dataframe for this sample
-        sample = data[(data['sample_names'] == ifile.split('/')[-1])]
+        sample = data[(data['sample_names'] == fname) & (data['lepton'] == channel)]
 
         ## drop all variables not going into the network
         to_classify = sample[
