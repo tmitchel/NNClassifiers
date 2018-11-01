@@ -2,9 +2,6 @@ language: python
 python:
   - "2.7"
 
-# Use matrix: to explicitly specify the builds
-# - Linux: Singular VM with docker, one build for
-#          each different image
 matrix:
   include:
     - os: linux
@@ -17,15 +14,16 @@ matrix:
 before_install:
   - |
     if [ "$TRAVIS_OS_NAME" == "linux" ] ; then
+      echo `ls`
       docker pull $DOCKER_IMAGE
       docker run \
              -itd \
              -v $TRAVIS_BUILD_DIR:$TRAVIS_BUILD_DIR \
              --name $DOCKER_CONTAINER $DOCKER_IMAGE
     fi
-    echo `ls`
 
 install:
   - pip install -r requirements.txt
+
 # command to run tests
 script: pytest
