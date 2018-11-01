@@ -1,15 +1,20 @@
-def ROC_curve(data_test, label_test, weights, model):
+def ROC_curve(data_test, label_test, weights, model, name, color):
     import matplotlib.pyplot as plt
     from sklearn.metrics import roc_curve, auc
 
+    if color == 'red':
+        t = 'Train'
+    else:
+        t = 'Test'
+
     # use the model to do classifications
-    label_predict = model.model.predict(data_test)
+    label_predict = model.predict(data_test)
     fpr, tpr, _ = roc_curve(
         label_test, label_predict[:, 0], sample_weight=weights)  # calculate the ROC curve
     roc_auc = auc(fpr, tpr)
     plt.plot([0, 1], [0, 1], linestyle='--', lw=2,
              color='k', label='random chance')
-    plt.plot(tpr, fpr, lw=2, color='cyan', label='NN auc = %.3f' % (roc_auc))
+    plt.plot(tpr, fpr, lw=2, color=color, label=t+' NN auc = %.3f' % (roc_auc))
     plt.xlim([0, 1.0])
     plt.ylim([0, 1.0])
     plt.xlabel('true positive rate')
@@ -17,10 +22,10 @@ def ROC_curve(data_test, label_test, weights, model):
     plt.title('receiver operating curve')
     plt.legend(loc="upper left")
     plt.grid()
-    plt.savefig('plots/ROC_'+model.name+'.pdf')
+    plt.savefig('plots/{}.pdf'.format(name))
 
 
-def trainingPlots(history, model):
+def trainingPlots(history, name):
     import matplotlib.pyplot as plt
     # plot loss vs epoch
     ax = plt.subplot(2, 1, 1)
@@ -37,26 +42,36 @@ def trainingPlots(history, model):
     ax.legend(loc="upper left")
     ax.set_xlabel('epoch')
     ax.set_ylabel('acc')
-    plt.savefig('plots/trainingPlot_'+model.name+'.pdf')
+    plt.savefig('plots/{}.pdf'.format(name))
 
 
-def discPlot(model, sig, bkg):
+def discPlot(name, model, train_sig, train_bkg, test_sig, test_bkg):
     import matplotlib.pyplot as plt
-    from sklearn.preprocessing import StandardScaler
-    sig = sig.values[:, 0:model.ninp]
-    bkg = bkg.values[:, 0:model.ninp]
+    import numpy as np
 
-    sig = StandardScaler().fit_transform(sig)
-    bkg = StandardScaler().fit_transform(bkg)
-
-    sig_pred = model.model.predict(sig)
-    bkg_pred = model.model.predict(bkg)
+    train_sig_pred = model.predict(train_sig)
+    train_bkg_pred = model.predict(train_bkg)
+    test_sig_pred = model.predict(test_sig)
+    test_bkg_pred = model.predict(test_bkg)
 
     plt.figure(figsize=(12, 8))
     plt.title('NN Discriminant')
     plt.xlabel('NN Disc.')
     plt.ylabel('Events/Bin')
-    plt.hist(bkg_pred, histtype='step', color='red', label='ZTT', bins=100)
-    plt.hist(sig_pred, histtype='step', color='blue', label='VBF', bins=100)
+
+    nb, binb, _ = plt.hist(test_bkg_pred, bins=50, range=(0, 1), density=True)
+    bin_centers = 0.5*(binb[1:] + binb[:-1])
+    ns, bins, _ = plt.hist(test_sig_pred, bins=50, range=(0, 1), density=True)
+    bin_centers = 0.5*(bins[1:] + bins[:-1])
+
+    plt.clf()
+
+    plt.hist(train_bkg_pred, histtype='stepfilled', color='red', label='ZTT Test', bins=50, range=(0,1), density=True, alpha=0.5)
+    plt.hist(train_sig_pred, histtype='stepfilled', color='blue', label='VBF Test', bins=50, range=(0,1), density=True, alpha=0.5)
+
+
+    plt.errorbar(y=nb, x=bin_centers, yerr=np.sqrt(nb)*.1, fmt='o', color='blue', label='ZTT Train')
+    plt.errorbar(y=ns, x=bin_centers, yerr=np.sqrt(ns)*.1, fmt='o', color='red', label='VBF Train')
+
     plt.legend()
-    plt.savefig('plots/disc_'+model.name+'.pdf')
+    plt.savefig('plots/{}.pdf'.format(name))
