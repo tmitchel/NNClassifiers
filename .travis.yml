@@ -23,6 +23,7 @@ before_install:
              -v $TRAVIS_BUILD_DIR:$TRAVIS_BUILD_DIR \
              --name $DOCKER_CONTAINER $DOCKER_IMAGE
     fi
+    echo ls
 
 install:
   - pip install -r requirements.txt
