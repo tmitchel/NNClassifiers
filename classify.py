@@ -14,7 +14,7 @@ def main(args):
         channel = 'mt'
     elif args.treename == 'etau_tree':
         channel = 'et'
-    elif args.treename == 'tt_tree':
+    elif args.treename == 'tautau_tree':
         channel = 'tt'
     else:
         print 'Hey. Bad channel. No. Try again.'

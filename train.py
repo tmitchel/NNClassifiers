@@ -32,14 +32,30 @@ def main(args):
                         )
     ]
 
+    # qcd_processes = data[
+    #     (data['sample_names'] == 'Data')
+    # ]
+
+    # qcd_processes = qcd_processes[
+    #     (qcd_processes)
+    # ]
+
     ## get the data for the two-classes to discriminate
     training_processes = data[
         (data['sample_names'] == args.signal) | (data['sample_names'] == args.background)
     ]
 
-    etau   = training_processes[(training_processes['lepton'] == 'et')]
-    mutau  = training_processes[(training_processes['lepton'] == 'mt')]
-    tautau = training_processes[(training_processes['lepton'] == 'tt')]
+    ## apply VBF category selection
+    vbf_processes = training_processes[
+        (training_processes['is_signal'] > 0) &
+        (training_processes['cat_vbf'] > 0) &
+        (training_processes['nbjets'] == 0) &
+        (training_processes['t1_dmf'] > 0)
+        ]
+
+    etau   = vbf_processes[(vbf_processes['lepton'] == 'et')]
+    mutau  = vbf_processes[(vbf_processes['lepton'] == 'mt')]
+    tautau = vbf_processes[(vbf_processes['lepton'] == 'tt')]
 
     ## do event selection
     selected_et, selected_mt, selected_tt = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -47,27 +63,23 @@ def main(args):
     ## electron-tau channel
     if len(etau) > 0:
         selected_et = etau[
-            (etau['cat_vbf'] > 0) &
-            (etau['nbjets'] == 0) &
+            (etau['mt'] < 50) &
             (etau['el_charge'] + etau['t1_charge'] == 0)
         ]
 
     ## muon-tau channel
     if len(mutau) > 0:
         selected_mt = mutau[
-            (mutau['cat_vbf'] > 0) &
-            (mutau['nbjets'] == 0) &
+            (mutau['mt'] < 50) &
             (mutau['mu_charge'] + mutau['t1_charge'] == 0)
         ]
 
-    # ## tau-tau channel
-    # if len(tautau) > 0:
-    #     selected_tt = tautau[
-    #         (training_processes['cat_vbf'] > 0) &
-    #         (training_processes['nbjets'] == 0) &
-    #         (training_processes['t1_charge'] +
-    #         training_processes['t2_charge'] == 0)
-    #     ]
+    ## tau-tau channel
+    if len(tautau) > 0:
+        selected_tt = tautau[
+            (tautau['t2_dmf'] > 0) &
+            (tautau['t1_charge'] + tautau['t2_charge'] == 0)
+        ]
 
     ## combine channels into total dataset
     selected_events = pd.concat([selected_et, selected_mt, selected_tt])
