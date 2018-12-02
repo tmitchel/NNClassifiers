@@ -1,7 +1,7 @@
 ***/*.pdf
 ***/*.root
 ***/*.h5
-pyenv
+.pyenv
 .vscode
 ***/*.json
 ***/*.hdf5
