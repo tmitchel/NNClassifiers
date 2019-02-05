@@ -1,6 +1,8 @@
 from sklearn.model_selection import train_test_split
+from os import environ
+environ['KERAS_BACKEND'] = 'tensorflow'
 from keras.callbacks import ModelCheckpoint, EarlyStopping
-from keras.layers import Dense
+from keras.layers import Dense, Dropout
 from keras.models import Sequential
 from keras import optimizers
 import pandas as pd
@@ -10,13 +12,20 @@ from visualize import *
 
 def main(args):
     data = pd.HDFStore(args.input)['df']
+    ## define training variables
+    ## REQUIRED:
+    ##   isSignal at end - 1
+    ##   evtwt at end 
     training_variables = [
-        'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
+        'mjj', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
         'costheta2', 'costhetastar', 'isSignal', 'evtwt'
     ]
+    nvars = len(training_variables) - 2  # input variables - isSignal - evtwt = nvar
 
     model = Sequential()
-    model.add(Dense(7, input_shape=(7,), name='input', activation='sigmoid'))
+    model.add(Dense(14, input_shape=(nvars,), name='input', activation='relu'))
+    # model.add(Dropout(0.1))
+    model.add(Dense(7, name='hidden', activation='relu'))
     model.add(Dense(1, activation='sigmoid', kernel_initializer='normal'))
     model.summary()
     model.compile(optimizer='adam', loss='binary_crossentropy',
@@ -32,14 +41,6 @@ def main(args):
                         )
     ]
 
-    # qcd_processes = data[
-    #     (data['sample_names'] == 'Data')
-    # ]
-
-    # qcd_processes = qcd_processes[
-    #     (qcd_processes)
-    # ]
-
     ## get the data for the two-classes to discriminate
     training_processes = data[
         (data['sample_names'] == args.signal) | (data['sample_names'] == args.background)
@@ -48,46 +49,43 @@ def main(args):
     ## apply VBF category selection
     vbf_processes = training_processes[
         (training_processes['is_signal'] > 0) &
-        (training_processes['cat_vbf'] > 0) &
-        (training_processes['nbjets'] == 0) &
-        (training_processes['t1_dmf'] > 0)
+        # (training_processes['cat_vbf'] > 0) &
+        (training_processes['mt'] < 50) &
+        (training_processes['OS'] > 0)
         ]
+
+    print 'No. Signal Events:     {}'.format(len(vbf_processes[vbf_processes['sample_names'] == args.signal]))
+    print 'No. Background Events: {}'.format(len(vbf_processes[vbf_processes['sample_names'] == args.background]))
 
     etau   = vbf_processes[(vbf_processes['lepton'] == 'et')]
     mutau  = vbf_processes[(vbf_processes['lepton'] == 'mt')]
-    tautau = vbf_processes[(vbf_processes['lepton'] == 'tt')]
 
     ## do event selection
-    selected_et, selected_mt, selected_tt = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    selected_et, selected_mt = pd.DataFrame(), pd.DataFrame()
 
-    ## electron-tau channel
+    ## electron-tau channel selection (all in vbf_process for now)
     if len(etau) > 0:
-        selected_et = etau[
-            (etau['mt'] < 50) &
-            (etau['el_charge'] + etau['t1_charge'] == 0)
-        ]
+        selected_et = etau
 
-    ## muon-tau channel
+    ## muon-tau channel selection (all in vbf_process for now)
     if len(mutau) > 0:
-        selected_mt = mutau[
-            (mutau['mt'] < 50) &
-            (mutau['mu_charge'] + mutau['t1_charge'] == 0)
-        ]
-
-    ## tau-tau channel
-    if len(tautau) > 0:
-        selected_tt = tautau[
-            (tautau['t2_dmf'] > 0) &
-            (tautau['t1_charge'] + tautau['t2_charge'] == 0)
-        ]
+        selected_mt = mutau
 
     ## combine channels into total dataset
-    selected_events = pd.concat([selected_et, selected_mt, selected_tt])
+    combine = pd.concat([selected_et, selected_mt])
+    sig_df = combine[(combine['sample_names'] == args.signal)]
+    bkg_df = combine[(combine['sample_names'] == args.background)]
+    scaleto = max(len(sig_df), len(bkg_df))
+    sig_df.loc[:, 'evtwt'] = sig_df['evtwt'].apply(lambda x: x*scaleto/len(sig_df))
+    bkg_df.loc[:, 'evtwt'] = bkg_df['evtwt'].apply(lambda x: x*scaleto/len(bkg_df))
+    selected_events = pd.concat([sig_df, bkg_df])
+    # selected_events.loc[:, 'evtwt'] = selected_events['evtwt'].apply(lambda x: x*3.4).values
 
+    ## remove all columns except those needed for training
     training_dataframe = selected_events[training_variables]
 
     training_data, testing_data, training_meta, testing_meta = train_test_split(
-        training_dataframe.values[:, :7], training_dataframe.values[:, 7:], test_size=0.1, random_state=7
+        training_dataframe.values[:, :nvars], training_dataframe.values[:, nvars:], test_size=0.1, random_state=7
     )
 
     training_labels = training_meta[:, 0]
