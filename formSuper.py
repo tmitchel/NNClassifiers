@@ -3,6 +3,7 @@ import ROOT as rt
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from array import array
 from root_pandas import read_root
 from sklearn.model_selection import train_test_split
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -41,7 +42,7 @@ def getDisc(df, index):
 
 
 def insert(df, ifile, treename):
-    root_file = rt.TFile(ifile, 'READ')
+    root_file = rt.TFile('{}.root'.format(ifile), 'READ')
     itree = root_file.Get(treename)
 
     oname = ifile.split('/')[-1].split('.root')[0]
