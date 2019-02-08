@@ -28,8 +28,6 @@ def main(args):
         channel = 'mt'
     elif args.treename == 'etau_tree':
         channel = 'et'
-    elif args.treename == 'tautau_tree':
-        channel = 'tt'
     else:
         print 'Hey. Bad channel. No. Try again.'
         sys.exit(1)
@@ -42,15 +40,8 @@ def main(args):
         ## get dataframe for this sample
         sample = data[(data['sample_names'] == fname) & (data['lepton'] == channel)].copy()
 
-        keep = [ 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar']
-        if 'add-mjj-hpt' in args.model:
-            keep = ['mjj', 'higgs_pT'] + keep
-        elif 'add-mjj' in args.model:
-            keep = ['mjj'] + keep
-        elif 'add-hpt' in args.model:
-            keep = ['higgs_pT'] + keep
-
         ## drop all variables not going into the network
+        keep = [ 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar']
         to_classify = sample[keep]
 
         ## do the classification
@@ -68,7 +59,6 @@ def main(args):
         nevents = root_file.Get('nevents').Clone()
         nevents.Write()
         ntree = itree.CloneTree(-1, 'fast')
-        #ntree = itree.CopyTree("")
 
         adiscs = array('f', [0.])
         disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')
