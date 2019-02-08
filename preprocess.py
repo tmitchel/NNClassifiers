@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 selection_vars = [
     'njets', 'OS',
     'is_signal', 'cat_vbf', 'nbjets', 
-    'mt', 't1_dmf', 't2_dmf', 't1_dmf_new', 't2_dmf_new', 't1_decayMode', 't2_decayMode'
+    'mt', 't1_dmf', 't1_dmf_new', 't1_decayMode'
 ]
 
 ## Variables that could be used as NN input. These should be normalized
@@ -37,7 +37,7 @@ def loadFile(ifile):
 
     input_df = read_root(ifile, columns=columns) ## read from TTrees into DataFrame
     input_df['idx'] = np.array([i for i in xrange(0, len(input_df))])
-    slim_df = input_df[(input_df['njets'] > 1)] ## preselection
+    slim_df = input_df[(input_df['njets'] > 1) & (input_df['mjj'] > 300)] ## preselection
     slim_df = slim_df.dropna(axis=0, how='any') ## drop events with a NaN
     selection_df = slim_df[selection_vars] ## get variables needed for selection (so they aren't normalized)
     weights = slim_df['evtwt'] ## get just the weights (they are scaled differently)
@@ -56,7 +56,9 @@ def loadFile(ifile):
     somenames = np.full(len(slim_df), filename.split('.root')[0])
 
     ## scale event weights between 0 - 1
-    weights = MinMaxScaler(feature_range=(0.1, 1)).fit_transform(weights.values.reshape(-1,1))
+    weights = MinMaxScaler(feature_range=(1., 2.)).fit_transform(weights.values.reshape(-1,1))
+#    weights = MinMaxScaler(feature_range=(0.1, 1)).fit_transform(weights.values.reshape(-1,1))
+
 
     ## get lepton channel
     lepton = np.full(len(slim_df), channel)

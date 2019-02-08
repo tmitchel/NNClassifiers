@@ -9,18 +9,16 @@ from keras.models import load_model
 import matplotlib.pyplot as plt
 
 def getGuess(df, index):
-    guess = df[(df['idx'] == index)]['guess'].values
-    if len(guess) == 1:
-        return guess[0]
-    elif len(guess) == 0:
-        return -999
-    else:
-        print 'Woah Woah Woah. That definitely shouldn\'t happen'
+    try:
+      guess = df.loc[index, 'guess']
+    except:
+      guess = -999
+    return guess
 
 def main(args):
     model = load_model('models/{}.hdf5'.format(args.model))
     data = pd.HDFStore(args.input_name)['df']
-    args.output_dir = 'output_files/' + args.model
+#    args.output_dir = 'output_files/' + args.model
 
     if not path.isdir(args.output_dir):
         mkdir(args.output_dir)
@@ -42,9 +40,9 @@ def main(args):
         print 'Processing file: {}'.format(fname)
 
         ## get dataframe for this sample
-        sample = data[(data['sample_names'] == fname) & (data['lepton'] == channel)]
+        sample = data[(data['sample_names'] == fname) & (data['lepton'] == channel)].copy()
 
-        keep = ['Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar']
+        keep = [ 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar']
         if 'add-mjj-hpt' in args.model:
             keep = ['mjj', 'higgs_pT'] + keep
         elif 'add-mjj' in args.model:
@@ -58,6 +56,7 @@ def main(args):
         ## do the classification
         guesses = model.predict(to_classify.values, verbose=False)
         sample['guess'] = guesses
+        sample.set_index('idx', inplace=True)
 
         ## now let's try and get this into the root file
         root_file = rt.TFile(ifile, 'READ')
@@ -68,14 +67,14 @@ def main(args):
         fout.cd()
         nevents = root_file.Get('nevents').Clone()
         nevents.Write()
-        # ntree = itree.CloneTree(-1, 'fast')
-        ntree = itree.CopyTree("")
+        ntree = itree.CloneTree(-1, 'fast')
+        #ntree = itree.CopyTree("")
 
         adiscs = array('f', [0.])
         disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')
         evt_index = 0
         for event in itree:
-            if evt_index % 100000 == 0:
+            if evt_index % 10000 == 0:
                 print 'Processing: {}% completed'.format((evt_index*100)/ntree.GetEntries())
 
             adiscs[0] = getGuess(sample, evt_index)

@@ -10,7 +10,8 @@ def ROC_curve(data_test, label_test, weights, model, name, color):
     # use the model to do classifications
     label_predict = model.predict(data_test)
     fpr, tpr, _ = roc_curve(
-        label_test, label_predict[:, 0], sample_weight=weights)  # calculate the ROC curve
+        label_test, label_predict[:, 0])#, sample_weight=weights)  # calculate the ROC curve
+        
     roc_auc = auc(fpr, tpr)
     plt.plot([0, 1], [0, 1], linestyle='--', lw=2,
              color='k', label='random chance')
@@ -22,7 +23,8 @@ def ROC_curve(data_test, label_test, weights, model, name, color):
     plt.title('receiver operating curve')
     plt.legend(loc="upper left")
     plt.grid()
-    plt.savefig('plots/{}.pdf'.format(name))
+    if 'testing' in name:
+        plt.savefig('plots/{}.png'.format(name))
 
 
 def trainingPlots(history, name):
@@ -42,7 +44,7 @@ def trainingPlots(history, name):
     ax.legend(loc="upper left")
     ax.set_xlabel('epoch')
     ax.set_ylabel('acc')
-    plt.savefig('plots/{}.pdf'.format(name))
+    plt.savefig('plots/{}.png'.format(name))
 
 
 def discPlot(name, model, train_sig, train_bkg, test_sig, test_bkg):
@@ -59,19 +61,19 @@ def discPlot(name, model, train_sig, train_bkg, test_sig, test_bkg):
     plt.xlabel('NN Disc.')
     plt.ylabel('Events/Bin')
 
-    nb, binb, _ = plt.hist(test_bkg_pred, bins=50, range=(0, 1), density=True)
+    nb, binb, _ = plt.hist(test_bkg_pred, bins=50, range=(0, 1), normed=True)
     bin_centers = 0.5*(binb[1:] + binb[:-1])
-    ns, bins, _ = plt.hist(test_sig_pred, bins=50, range=(0, 1), density=True)
+    ns, bins, _ = plt.hist(test_sig_pred, bins=50, range=(0, 1), normed=True)
     bin_centers = 0.5*(bins[1:] + bins[:-1])
 
     plt.clf()
 
-    plt.hist(train_bkg_pred, histtype='stepfilled', color='red', label='ZTT Test', bins=50, range=(0,1), density=True, alpha=0.5)
-    plt.hist(train_sig_pred, histtype='stepfilled', color='blue', label='VBF Test', bins=50, range=(0,1), density=True, alpha=0.5)
+    plt.hist(train_bkg_pred, histtype='stepfilled', color='red', label='ZTT Train', bins=50, range=(0,1), normed=True, alpha=0.5)
+    plt.hist(train_sig_pred, histtype='stepfilled', color='blue', label='VBF Train', bins=50, range=(0,1), normed=True, alpha=0.5)
 
 
-    plt.errorbar(y=nb, x=bin_centers, yerr=np.sqrt(nb)*.1, fmt='o', color='blue', label='ZTT Train')
-    plt.errorbar(y=ns, x=bin_centers, yerr=np.sqrt(ns)*.1, fmt='o', color='red', label='VBF Train')
+    plt.errorbar(y=nb, x=bin_centers, yerr=np.sqrt(nb)*.1, fmt='o', color='blue', label='ZTT Test')
+    plt.errorbar(y=ns, x=bin_centers, yerr=np.sqrt(ns)*.1, fmt='o', color='red', label='VBF Test')
 
     plt.legend()
-    plt.savefig('plots/{}.pdf'.format(name))
+    plt.savefig('plots/{}.png'.format(name))
