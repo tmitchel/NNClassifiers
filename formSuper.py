@@ -114,7 +114,7 @@ def main(args):
     bkg['super'] = fitted.transform(bkg.values[:, 0:2])
 
     for iname in sig_names + bkg_names:
-        insert(combined[(combined['names'] == iname)],
+        insert(combined[(combined['names'] = iname)],
                prefix+iname, args.treename)
 
 
