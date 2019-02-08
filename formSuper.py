@@ -61,7 +61,7 @@ def insert(df, ifile, treename):
             print 'Processing: {}% completed'.format(
                 (evt_index*100)/ntree.GetEntries())
 
-        adiscs[0] = getDisc(sample, evt_index)
+        adiscs[0] = getDisc(df, evt_index)
         evt_index += 1
         fout.cd()
         disc_branch.Fill()
