@@ -7,11 +7,12 @@ fi
 source .pyenv/bin/activate # activate.csh for tcsh
 eval `scramv1 runtime -sh` # cmsenv
 
-pip install --no-cache-dir --upgrade numpy==1.15.4
-pip install --no-cache-dir matplotlib
-pip install --no-cache-dir scikit-learn
-pip install --no-cache-dir tables
-pip install --no-cache-dir pandas
-pip install --no-cache-dir tensorflow
-pip install --no-cache-dir keras
-pip install --no-cache-dir root_pandas
+pip install --no-cache-dir --user --upgrade numpy==1.15.4
+pip install --no-cache-dir --user matplotlib
+pip install --no-cache-dir --user scikit-learn
+pip install --no-cache-dir --user tables
+pip install --no-cache-dir --user pandas
+pip install --no-cache-dir --user tensorflow
+pip install --no-cache-dir --user keras
+pip install --no-cache-dir --user root_pandas
+pip install --no-cache-dir --user uproot
