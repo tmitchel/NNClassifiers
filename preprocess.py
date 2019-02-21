@@ -13,7 +13,7 @@ selection_vars = [
 
 ## Variables that could be used as NN input. These should be normalized
 scaled_vars = [
-    'evtwt', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar', 'mjj', 'higgs_pT'
+    'evtwt', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar', 'mjj', 'higgs_pT', 'm_sv'
 ]
 
 def loadFile(ifile):

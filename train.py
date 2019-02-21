@@ -17,7 +17,7 @@ def main(args):
     ##   isSignal at end - 1
     ##   evtwt at end 
     training_variables = [
-        'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
+         'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
         'costheta2', 'costhetastar', 'isSignal', 'evtwt'
     ]
     nvars = len(training_variables) - 2  # input variables - isSignal - evtwt = nvar

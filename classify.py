@@ -41,7 +41,7 @@ def main(args):
         sample = data[(data['sample_names'] == fname) & (data['lepton'] == channel)].copy()
 
         ## drop all variables not going into the network
-        keep = [ 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar']
+        keep = ['m_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar']
         to_classify = sample[keep]
 
         ## do the classification
