@@ -74,7 +74,7 @@ def doLDA(input_data, all_samples):
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
     lda = LinearDiscriminantAnalysis(n_components=1)
-    fitted = lda.fit(input_data.values[:, 0:2], input_data['isSignal'].values)
+    fitted = lda.fit(input_data[['m_sv', 'NN_disc']].values, input_data['isSignal'].values)
     all_samples['super'] = fitted.transform(all_samples[['m_sv', 'NN_disc']].values)
     return all_samples
 
@@ -111,11 +111,9 @@ def doNN(input_data, all_samples):
     all_samples.loc[:, 'm_sv'] = scaled_all_samples['m_sv'].values
     all_samples.loc[:, 'NN_disc'] = scaled_all_samples['NN_disc'].values
 
-
-
     history = model.fit(input_data[['m_sv', 'NN_disc']].values, input_data['isSignal'].values, shuffle=True,
                         epochs=10000, batch_size=1024, verbose=True,
-                        callbacks=callbacks, validation_split=0.25
+                        callbacks=callbacks, validation_split=0.25, sample_weight=input_data['evtwt'].values
                         )
 
     all_samples['super'] = model.predict(all_samples[['m_sv', 'NN_disc']].values)
@@ -126,7 +124,7 @@ def doNN(input_data, all_samples):
 def main(args):
     prefix = '/afs/hep.wisc.edu/home/tmitchel/private/higgsToTauTau/ltau_analyzer/CMSSW_9_4_0/src/ltau_analyzers/Output/trees/mutau2016_official_v1p3_NNed/'
 
-    sig_names = ['vbf_inc']
+    sig_names = ['ggh_madgraph_twojet']
     bkg_names = ['embedded', 'TTT', 'TTJ', 'ZJ', 'ZL', 'VVJ', 'VVT', 'W']
 
     sig = build_signal(['{}/{}.root'.format(prefix, name)
@@ -155,8 +153,6 @@ def main(args):
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument('-s', '--signal', action='store',
-                        dest='signal', help='signal name')
     parser.add_argument('-t', '--treename', action='store',
                         dest='treename', help='name of tree')
     parser.add_argument('-d', '--output-dir', action='store',
