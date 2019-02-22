@@ -20,7 +20,7 @@ def main(args):
         ]
     elif args.category == 'boosted':
         training_variables = [
-            'higgs_pT', 't2_pt', 'MT_t1MET', 'MT_HiggsMET', 'jmet_dphi'
+            'higgs_pT', 't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi'
         ]
     else:
         raise Exception('{} isn\'t an acceptable category')

@@ -15,7 +15,7 @@ selection_vars = [
 scaled_vars = [
     'evtwt', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
     'costheta2', 'costhetastar', 'mjj', 'higgs_pT', 'm_sv',
-    'higgs_pT', 't2_pt', 'MT_t1MET', 'MT_HiggsMET', 'jmet_dphi'
+    'higgs_pT', 't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi'
 ]
 
 
