@@ -63,7 +63,7 @@ def main(args):
         adiscs = array('f', [0.])
         disc_branch = ntree.Branch('NN_disc', adiscs, 'NN_disc/F')
         evt_index = 0
-        for event in itree:
+        for _ in itree:
             if evt_index % 10000 == 0:
                 print 'Processing: {}% completed'.format((evt_index*100)/ntree.GetEntries())
 

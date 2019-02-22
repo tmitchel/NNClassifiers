@@ -13,19 +13,23 @@ from visualize import *
 def main(args):
     data = pd.HDFStore(args.input)['df']
     ## define training variables
-    ## REQUIRED:
-    ##   isSignal at end - 1
-    ##   evtwt at end 
-    training_variables = [
-         'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
-        'costheta2', 'costhetastar', 'isSignal', 'evtwt'
-    ]
-    nvars = len(training_variables) - 2  # input variables - isSignal - evtwt = nvar
+    if args.category == 'vbf':
+        training_variables = [
+            'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
+            'costheta2', 'costhetastar'
+        ]
+    elif args.category == 'boosted':
+        training_variables = [
+            'higgs_pT', 't2_pt', 'MT_t1MET', 'MT_HiggsMET', 'jmet_dphi'
+        ]
+    else:
+        raise Exception('{} isn\'t an acceptable category')
+
+    nvars = len(training_variables)
 
     model = Sequential()
-    model.add(Dense(14, input_shape=(nvars,), name='input', activation='relu'))
-    # model.add(Dropout(0.1))
-    model.add(Dense(7, name='hidden', activation='relu'))
+    model.add(Dense(nvars*2, input_shape=(nvars,), name='input', activation='relu'))
+    model.add(Dense(nvars, name='hidden', activation='relu'))
     model.add(Dense(1, activation='sigmoid', kernel_initializer='normal'))
     model.summary()
     model.compile(optimizer='adam', loss='binary_crossentropy',
@@ -49,7 +53,6 @@ def main(args):
     ## apply VBF category selection
     vbf_processes = training_processes[
         (training_processes['is_signal'] > 0) &
-        # (training_processes['cat_vbf'] > 0) &
         (training_processes['mt'] < 50) &
         (training_processes['OS'] > 0)
         ]
@@ -79,17 +82,14 @@ def main(args):
     sig_df.loc[:, 'evtwt'] = sig_df['evtwt'].apply(lambda x: x*scaleto/len(sig_df))
     bkg_df.loc[:, 'evtwt'] = bkg_df['evtwt'].apply(lambda x: x*scaleto/len(bkg_df))
     selected_events = pd.concat([sig_df, bkg_df])
-    # selected_events.loc[:, 'evtwt'] = selected_events['evtwt'].apply(lambda x: x*3.4).values
 
     ## remove all columns except those needed for training
-    training_dataframe = selected_events[training_variables]
+    training_dataframe = selected_events[training_variables + ['isSignal', 'evtwt']]
 
-    training_data, testing_data, training_meta, testing_meta = train_test_split(
-        training_dataframe.values[:, :nvars], training_dataframe.values[:, nvars:], test_size=0.1, random_state=7
+    training_data, testing_data, training_labels, testing_labels, training_weights, testing_weights  = train_test_split(
+        training_dataframe[training_variables].values, training_dataframe['isSignal'].values, training_dataframe['evtwt'].values,
+        test_size=0.1, random_state=7
     )
-
-    training_labels = training_meta[:, 0]
-    training_weights = training_meta[:, 1]
 
     ## train that there model, my dude
     history = model.fit(training_data, training_labels, shuffle=True,
@@ -99,22 +99,22 @@ def main(args):
 
     if not args.dont_plot:
         ROC_curve(training_data, training_labels, training_weights, model, 'ROC_training_{}'.format(args.model), 'red')
-        ROC_curve(testing_data, testing_meta[:, 0], testing_meta[:, 1], model, 'ROC_testing_{}'.format(args.model), 'cyan')
+        ROC_curve(testing_data, testing_labels[:], testing_weights[:], model, 'ROC_testing_{}'.format(args.model), 'cyan')
 
         trainingPlots(history, 'trainingPlot_{}'.format(args.model))
 
         test_sig, test_bkg = [], []
-        for i in range(len(testing_meta)):
-            if testing_meta[i, 0] == 1:
+        for i in range(len(testing_labels)):
+            if testing_labels[i] == 1:
                 test_sig.append(testing_data[i, :])
-            elif testing_meta[i, 0] == 0:
+            elif testing_labels[i] == 0:
                 test_bkg.append(testing_data[i, :])
 
         train_sig, train_bkg = [], []
-        for i in range(len(training_meta)):
-            if training_meta[i, 0] == 1:
+        for i in range(len(training_labels)):
+            if training_labels[i] == 1:
                 train_sig.append(training_data[i, :])
-            elif training_meta[i, 0] == 0:
+            elif training_labels[i] == 0:
                 train_bkg.append(training_data[i, :])
 
         discPlot('NN_disc_{}'.format(args.model), model, np.array(train_sig), np.array(train_bkg), np.array(test_sig), np.array(test_bkg))
@@ -127,5 +127,6 @@ if __name__ == "__main__":
     parser.add_argument('--signal', '-s', action='store', dest='signal', default='VBF125.root', help='name of signal file')
     parser.add_argument('--background', '-b', action='store', dest='background', default='ZTT.root', help='name of background file')
     parser.add_argument('--dont-plot', action='store_true', dest='dont_plot', help='don\'t make training plots')
+    parser.add_argument('--category', '-c', action='store', dest='category', default='vbf', help='category to train')
 
     main(parser.parse_args())
