@@ -41,7 +41,12 @@ def main(args):
         sample = data[(data['sample_names'] == fname) & (data['lepton'] == channel)].copy()
 
         ## drop all variables not going into the network
-        keep = ['m_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar']
+        if args.category == 'vbf':
+            keep = ['m_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar']
+        elif args.category == 'boosted':
+            keep = ['higgs_pT', 't2_pt', 'MT_t1MET', 'MT_HiggsMET', 'jmet_dphi']
+        else:
+            raise Exception('{} isn\'t an acceptable category')
         to_classify = sample[keep]
 
         ## do the classification
@@ -84,5 +89,6 @@ if __name__ == "__main__":
     parser.add_argument('--input', '-i', action='store', dest='input_name', default='test', help='name of input dataset')
     parser.add_argument('--dir', '-d', action='store', dest='input_dir', default='input_files/etau_stable_Oct24', help='name of ROOT input directory')
     parser.add_argument('--output-dir', '-o', action='store', dest='output_dir', default='output_files', help='name of directory for output')
+    parser.add_argument('--category', '-c', action='store', dest='category', default='vbf', help='category to train')
 
     main(parser.parse_args())
