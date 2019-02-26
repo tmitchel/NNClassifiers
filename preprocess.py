@@ -15,7 +15,7 @@ selection_vars = [
 scaled_vars = [
     'evtwt', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
     'costheta2', 'costhetastar', 'mjj', 'higgs_pT', 'm_sv',
-    'higgs_pT', 't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi'
+    'higgs_pT', 't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi',
 ]
 
 
@@ -50,13 +50,13 @@ def loadFile(ifile, category):
         ]
     elif category == 'boosted':
         slim_df = input_df[
-            (input_df['njets'] == 1) |
-            ((input_df['njets'] > 1) & (input_df['mjj'] < 300))
+            (input_df['njets'] == 1)
         ]
     else:
         raise Exception('Not a category: {}'.format(category))
 
     slim_df = slim_df.dropna(axis=0, how='any')  # drop events with a NaN
+
     # get variables needed for selection (so they aren't normalized)
     selection_df = slim_df[selection_vars]
     # get just the weights (they are scaled differently)
