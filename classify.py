@@ -1,31 +1,50 @@
 from __future__ import print_function
-import sys
-import ROOT as rt
+from ROOT import TFile
 import pandas as pd
 from glob import glob
 from array import array
 from os import environ, path, mkdir
 environ['KERAS_BACKEND'] = 'tensorflow'
 from keras.models import load_model
-import matplotlib.pyplot as plt
 
-def getGuess(df, index):
+class Predictor:
+  def __init__(self, data_name, model_name, keep):
+    self.bad = False
+    self.keep = keep
+    self.data_copy = pd.DataFrame()
+    # open the input data
     try:
-      guess = df.loc[index, 'guess']
+      self.data = pd.HDFStore(data_name)['df']
+    except:
+      self.bad = True
+
+    # open the trained model
+    try:
+      self.model = load_model('models/{}.hdf5'.format(model_name))
+    except:
+      self.bad = True
+
+  def make_prediction(self, fname, channel):
+    self.data_copy = self.data_copy.iloc[0:0]
+    if not self.bad:
+      self.data_copy = self.data[
+              (self.data['sample_names'] == fname) & (self.data['lepton'] == channel)
+          ].copy()
+
+      to_classify = self.data_copy[self.keep]
+      guesses = self.model.predict(to_classify.values, verbose=False)
+      self.data_copy['guess'] = guesses
+      self.data_copy.set_index('idx', inplace=True)
+
+  def getGuess(self, index):
+    try:
+      guess = self.data_copy.loc[index, 'guess']
     except:
       guess = -999
     return guess
 
+
 def main(args):
-    model_vbf = load_model('models/{}.hdf5'.format(args.model_vbf))
-    model_boost = load_model('models/{}.hdf5'.format(args.model_boost))
-    data_vbf = pd.HDFStore(args.input_vbf)['df']
-    data_boost = pd.HDFStore(args.input_boost)['df']
-
-    if not path.isdir(args.output_dir):
-        mkdir(args.output_dir)
-
-    file_names = [ifile for ifile in glob('{}/*.root'.format(args.input_dir))]
     if args.treename == 'mutau_tree':
         channel = 'mt'
     elif args.treename == 'etau_tree':
@@ -33,39 +52,35 @@ def main(args):
     else:
         raise Exception('Hey. Bad channel. No. Try again.')
 
+    if not path.isdir(args.output_dir):
+        mkdir(args.output_dir)
+
+    file_names = [ifile for ifile in glob('{}/*.root'.format(args.input_dir))]
+
+    keep_vbf = [
+      'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 
+      'Phi1', 'costheta1', 'costheta2', 'costhetastar'
+    ]
+    vbf_pred = Predictor(args.input_vbf, args.model_vbf, keep_vbf)
+
+    keep_boost = [
+      'higgs_pT', 't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi'
+    ]
+    boost_pred = Predictor(args.input_boost, args.model_boost, keep_boost)
 
     for ifile in file_names:
         fname = ifile.split('/')[-1].split('.root')[0]
-        print 'Processing file: {}'.format(fname)
+        print('Processing file: {}'.format(fname))
 
-        ## get dataframe for this sample
-        sample_vbf = data_vbf[
-            (data_vbf['sample_names'] == fname) & (data_vbf['lepton'] == channel)
-        ].copy()
-        sample_boost = data_boost[
-            (data_boost['sample_names'] == fname) & (data_boost['lepton'] == channel)
-        ].copy()
-
-        ## drop all variables not going into the network
-        keep_vbf = ['m_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar']
-        keep_boost = ['higgs_pT', 't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi']
-        to_classify_vbf = sample_vbf[keep_vbf]
-        to_classify_boost = sample_boost[keep_boost]
-
-        ## do the classification
-        guesses_vbf = model_vbf.predict(to_classify_vbf.values, verbose=False)
-        guesses_boost = model_boost.predict(to_classify_boost.values, verbose=False)
-        sample_vbf['guess'] = guesses_vbf
-        sample_boost['guess'] = guesses_boost
-        sample_vbf.set_index('idx', inplace=True)
-        sample_boost.set_index('idx', inplace=True)
+        vbf_pred.make_prediction(fname, channel)
+        boost_pred.make_prediction(fname, channel)
 
         ## now let's try and get this into the root file
-        root_file = rt.TFile(ifile, 'READ')
+        root_file = TFile(ifile, 'READ')
         itree = root_file.Get(args.treename)
 
         oname = ifile.split('/')[-1].split('.root')[0]
-        fout = rt.TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
+        fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
         fout.cd()
         nevents = root_file.Get('nevents').Clone()
         nevents.Write()
@@ -82,18 +97,19 @@ def main(args):
         progress = 1
         fraction = nevts / 10
         for _ in itree:
-            if evt_index == progress * fraction
-                print('{} % complete'.format(progress*10), end='\r', flush=True)
-                progress+=1
+            if evt_index == progress * fraction:
+              print('{}% complete'.format(progress*10))
+              progress+=1
 
-            branch_var[0] = getGuess(sample_vbf, evt_index)
-            branch_var_vbf[0] = getGuess(sample_vbf, evt_index)
-            branch_var_boost[0] = getGuess(sample_boost, evt_index)
+            branch_var[0] = vbf_pred.getGuess(evt_index)
+            branch_var_vbf[0] = vbf_pred.getGuess(evt_index)
+            branch_var_boost[0] = boost_pred.getGuess(evt_index)
             evt_index += 1
             fout.cd()
             disc_branch.Fill()
             disc_branch_vbf.Fill()
             disc_branch_boost.Fill()
+        print('')
         root_file.Close()
         fout.cd()
         ntree.Write()
