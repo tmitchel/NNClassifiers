@@ -16,6 +16,7 @@ scaled_vars = [
     'evtwt', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
     'costheta2', 'costhetastar', 'mjj', 'higgs_pT', 'm_sv',
     'higgs_pT', 't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi',
+    't1_pt', 'lt_dphi', 'el_pt', 'mu_pt', 'hj_dphi', 'MT_lepMET'
 ]
 
 
@@ -57,6 +58,12 @@ def loadFile(ifile, category):
 
     slim_df = slim_df.dropna(axis=0, how='any')  # drop events with a NaN
 
+    if channel == 'mt':
+      slim_df['lep_pt'] = slim_df['mu_pt'].copy()
+    elif channel == 'et':
+      slim_df['lep_pt'] = slim_df['el_pt'].copy()
+    slim_df = slim_df.drop(['el_pt', 'mu_pt'], axis=1)
+    
     # get variables needed for selection (so they aren't normalized)
     selection_df = slim_df[selection_vars]
     # get just the weights (they are scaled differently)

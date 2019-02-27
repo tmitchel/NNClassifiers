@@ -20,7 +20,7 @@ def main(args):
         ]
     elif args.category == 'boosted':
         training_variables = [
-            'higgs_pT', 't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi'
+            'higgs_pT', 't1_pt', 'lt_dphi', 'lep_pt', 'hj_dphi',# 'MT_lepMET', 'MT_HiggsMET'
         ]
     else:
         raise Exception('{} isn\'t an acceptable category')
@@ -85,7 +85,7 @@ def main(args):
 
     ## remove all columns except those needed for training
     training_dataframe = selected_events[training_variables + ['isSignal', 'evtwt']]
-
+    
     training_data, testing_data, training_labels, testing_labels, training_weights, testing_weights  = train_test_split(
         training_dataframe[training_variables].values, training_dataframe['isSignal'].values, training_dataframe['evtwt'].values,
         test_size=0.1, random_state=7

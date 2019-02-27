@@ -64,7 +64,7 @@ def main(args):
     vbf_pred = Predictor(args.input_vbf, args.model_vbf, keep_vbf)
 
     keep_boost = [
-      'higgs_pT', 't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi'
+             'higgs_pT', 't1_pt', 'lt_dphi', 'lep_pt', 'hj_dphi',# 'MT_lepMET', 'MT_HiggsMET'   
     ]
     boost_pred = Predictor(args.input_boost, args.model_boost, keep_boost)
 
