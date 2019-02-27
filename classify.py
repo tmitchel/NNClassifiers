@@ -1,9 +1,9 @@
-from __future__ import print_function
-from ROOT import TFile
 import pandas as pd
+from ROOT import TFile
 from glob import glob
 from array import array
 from os import environ, path, mkdir
+from multiprocessing import Process
 environ['KERAS_BACKEND'] = 'tensorflow'
 from keras.models import load_model
 
@@ -43,6 +43,48 @@ class Predictor:
       guess = -999
     return guess
 
+def fillFile(ifile, channel, args, vbf_pred, boost_pred):
+  fname = ifile.split('/')[-1].split('.root')[0]
+  print 'Processing file: {}'.format(fname)
+
+  vbf_pred.make_prediction(fname, channel)
+  boost_pred.make_prediction(fname, channel)
+
+  ## now let's try and get this into the root file
+  root_file = TFile(ifile, 'READ')
+  itree = root_file.Get(args.treename)
+
+  oname = ifile.split('/')[-1].split('.root')[0]
+  fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
+  fout.cd()
+  nevents = root_file.Get('nevents').Clone()
+  nevents.Write()
+  ntree = itree.CloneTree(-1, 'fast')
+
+  branch_var = array('f', [0.])
+  branch_var_vbf = array('f', [0.])
+  branch_var_boost = array('f', [0.])
+  disc_branch = ntree.Branch('NN_disc', branch_var, 'NN_disc/F')
+  disc_branch_vbf = ntree.Branch('NN_disc_vbf', branch_var_vbf, 'NN_disc_vbf/F')
+  disc_branch_boost = ntree.Branch('NN_disc_boost', branch_var_boost, 'NN_disc_boost/F')
+  nevts = ntree.GetEntries()
+
+  evt_index = 0
+  for _ in itree:
+    branch_var[0] = vbf_pred.getGuess(evt_index)
+    branch_var_vbf[0] = vbf_pred.getGuess(evt_index)
+    branch_var_boost[0] = boost_pred.getGuess(evt_index)
+    evt_index += 1
+    fout.cd()
+    disc_branch.Fill()
+    disc_branch_vbf.Fill()
+    disc_branch_boost.Fill()
+
+    root_file.Close()
+    fout.cd()
+    ntree.Write()
+    fout.Close()
+  print '{} Completed.'.format(fname)
 
 def main(args):
     if args.treename == 'mutau_tree':
@@ -68,52 +110,10 @@ def main(args):
     ]
     boost_pred = Predictor(args.input_boost, args.model_boost, keep_boost)
 
-    for ifile in file_names:
-        fname = ifile.split('/')[-1].split('.root')[0]
-        print('Processing file: {}'.format(fname))
+    processes = [Process(target=fillFile, args=(ifile, channel, args, vbf_pred, boost_pred)) for ifile in file_names]
+    for process in processes:
+      process.start()
 
-        vbf_pred.make_prediction(fname, channel)
-        boost_pred.make_prediction(fname, channel)
-
-        ## now let's try and get this into the root file
-        root_file = TFile(ifile, 'READ')
-        itree = root_file.Get(args.treename)
-
-        oname = ifile.split('/')[-1].split('.root')[0]
-        fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
-        fout.cd()
-        nevents = root_file.Get('nevents').Clone()
-        nevents.Write()
-        ntree = itree.CloneTree(-1, 'fast')
-
-        branch_var = array('f', [0.])
-        branch_var_vbf = array('f', [0.])
-        branch_var_boost = array('f', [0.])
-        disc_branch = ntree.Branch('NN_disc', branch_var, 'NN_disc/F')
-        disc_branch_vbf = ntree.Branch('NN_disc_vbf', branch_var_vbf, 'NN_disc_vbf/F')
-        disc_branch_boost = ntree.Branch('NN_disc_boost', branch_var_boost, 'NN_disc_boost/F')
-        nevts = ntree.GetEntries()
-        evt_index = 0
-        progress = 1
-        fraction = nevts / 10
-        for _ in itree:
-            if evt_index == progress * fraction:
-              print('{}% complete'.format(progress*10))
-              progress+=1
-
-            branch_var[0] = vbf_pred.getGuess(evt_index)
-            branch_var_vbf[0] = vbf_pred.getGuess(evt_index)
-            branch_var_boost[0] = boost_pred.getGuess(evt_index)
-            evt_index += 1
-            fout.cd()
-            disc_branch.Fill()
-            disc_branch_vbf.Fill()
-            disc_branch_boost.Fill()
-        print('')
-        root_file.Close()
-        fout.cd()
-        ntree.Write()
-        fout.Close()
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
