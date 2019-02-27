@@ -71,6 +71,8 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
   
   evt_index = 0
   for _ in itree:
+    if evt_index > 100000:
+      print 'Process: {} has completed: {} events out of {}'.format(fname, evt_index, nevts)
     branch_var[0] = vbf_pred.getGuess(evt_index)
     branch_var_vbf[0] = vbf_pred.getGuess(evt_index)
     branch_var_boost[0] = boost_pred.getGuess(evt_index)
