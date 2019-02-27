@@ -45,7 +45,7 @@ class Predictor:
 
 def fillFile(ifile, channel, args, vbf_pred, boost_pred):
   fname = ifile.split('/')[-1].split('.root')[0]
-  print 'Processing file: {}'.format(fname)
+  print 'Starting process for file: {}'.format(fname)
 
   vbf_pred.make_prediction(fname, channel)
   boost_pred.make_prediction(fname, channel)
@@ -68,22 +68,23 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
   disc_branch_vbf = ntree.Branch('NN_disc_vbf', branch_var_vbf, 'NN_disc_vbf/F')
   disc_branch_boost = ntree.Branch('NN_disc_boost', branch_var_boost, 'NN_disc_boost/F')
   nevts = ntree.GetEntries()
-
+  
   evt_index = 0
   for _ in itree:
     branch_var[0] = vbf_pred.getGuess(evt_index)
     branch_var_vbf[0] = vbf_pred.getGuess(evt_index)
     branch_var_boost[0] = boost_pred.getGuess(evt_index)
+    
     evt_index += 1
     fout.cd()
     disc_branch.Fill()
     disc_branch_vbf.Fill()
     disc_branch_boost.Fill()
 
-    root_file.Close()
-    fout.cd()
-    ntree.Write()
-    fout.Close()
+  root_file.Close()
+  fout.cd()
+  ntree.Write()
+  fout.Close()
   print '{} Completed.'.format(fname)
 
 def main(args):
@@ -113,6 +114,8 @@ def main(args):
     processes = [Process(target=fillFile, args=(ifile, channel, args, vbf_pred, boost_pred)) for ifile in file_names]
     for process in processes:
       process.start()
+
+    print 'Finished processing.'
 
 
 if __name__ == "__main__":
