@@ -16,7 +16,8 @@ scaled_vars = [
     'evtwt', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
     'costheta2', 'costhetastar', 'mjj', 'higgs_pT', 'm_sv',
     'higgs_pT', 't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi',
-    't1_pt', 'lt_dphi', 'el_pt', 'mu_pt', 'hj_dphi', 'MT_lepMET'
+    't1_pt', 'lt_dphi', 'el_pt', 'mu_pt', 'hj_dphi', 'MT_lepMET', 'met',
+    'ME_sm_VBF', 'ME_bkg'
 ]
 
 
@@ -48,6 +49,7 @@ def loadFile(ifile, category):
     if category == 'vbf':
         slim_df = input_df[
             (input_df['njets'] > 1) & (input_df['mjj'] > 300)
+#            (input_df['njets'] > 1)
         ]
     elif category == 'boosted':
         slim_df = input_df[
@@ -58,11 +60,17 @@ def loadFile(ifile, category):
 
     slim_df = slim_df.dropna(axis=0, how='any')  # drop events with a NaN
 
+    # combine lepton pT's
     if channel == 'mt':
       slim_df['lep_pt'] = slim_df['mu_pt'].copy()
     elif channel == 'et':
       slim_df['lep_pt'] = slim_df['el_pt'].copy()
     slim_df = slim_df.drop(['el_pt', 'mu_pt'], axis=1)
+
+    # add Dbkg_VBF
+    slim_df['Dbkg_VBF'] = slim_df['ME_sm_VBF'] / (45 * slim_df['ME_bkg'] + slim_df['ME_sm_VBF'])
+    print slim_df['Dbkg_VBF'].isnull().values.any()
+    slim_df = slim_df.drop(['ME_sm_VBF', 'ME_bkg'], axis=1)
     
     # get variables needed for selection (so they aren't normalized)
     selection_df = slim_df[selection_vars]

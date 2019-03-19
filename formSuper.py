@@ -8,28 +8,33 @@ from array import array
 from root_pandas import read_root
 
 
-def build_background(files):
-    bkg_df = pd.DataFrame([])
-    for ifile in files:
-        df = read_root(ifile, columns=['NN_disc', 'm_sv', 'evtwt'])
-        df['idx'] = np.array([i for i in xrange(0, len(df))])
-        df = df[(df['NN_disc'] > -1)]
-        df['isSignal'] = np.zeros(len(df))
-        df['name'] = np.full(len(df), ifile.split('/')[-1].split('.root')[0])
-        bkg_df = pd.concat([bkg_df, df])
-    return bkg_df
+def build_dataframe(files, isSignal):
+    apply_df = pd.DataFrame([])
+    columns = [
+        'NN_disc_vbf', 'm_sv', 'evtwt',
+        'njets', 'mjj', 'is_signal', 'mt', 'OS'
+    ]
 
+    if isSignal:
+        signal_array = np.ones
+    else:
+        signal_array = np.zeros
 
-def build_signal(files):
-    sig_df = pd.DataFrame([])
     for ifile in files:
-        df = read_root(ifile, columns=['NN_disc', 'm_sv', 'evtwt'])
+        df = read_root(ifile, columns=columns)
         df['idx'] = np.array([i for i in xrange(0, len(df))])
-        df = df[(df['NN_disc'] > -1)]
-        df['isSignal'] = np.ones(len(df))
+        df = df[(df['NN_disc_vbf'] > -1)]
+        df['isSignal'] = signal_array(len(df))
         df['name'] = np.full(len(df), ifile.split('/')[-1].split('.root')[0])
-        sig_df = pd.concat([sig_df, df])
-    return sig_df
+        apply_df = pd.concat([apply_df, df])
+    
+    # vbf category selection
+    train_df = apply_df[
+        (apply_df['is_signal'] > 0) & (apply_df['OS'] > 0) &
+        (apply_df['njets'] > 1) & (apply_df['mjj'] > 300) & (apply_df['mt'] < 50)
+    ]
+
+    return train_df, apply_df
 
 
 def getDisc(df, index):
@@ -41,6 +46,7 @@ def getDisc(df, index):
 
 
 def insert(df, ifile, treename):
+    df.set_index('idx', inplace=True)
     root_file = rt.TFile('{}'.format(ifile), 'READ')
     itree = root_file.Get(treename)
 
@@ -70,26 +76,30 @@ def insert(df, ifile, treename):
     fout.Close()
 
 
-def doLDA(input_data, all_samples):
+def doLDA(train_data, apply_data):
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
+
     lda = LinearDiscriminantAnalysis(n_components=1)
-    fitted = lda.fit(input_data[['m_sv', 'NN_disc']].values, input_data['isSignal'].values)
-    all_samples['super'] = fitted.transform(all_samples[['m_sv', 'NN_disc']].values)
-    return all_samples
+    fitted = lda.fit(train_data[['m_sv', 'NN_disc_vbf']].values, train_data['isSignal'].values)
+    apply_data['super'] = fitted.transform(apply_data[['m_sv', 'NN_disc_vbf']].values)
+    return apply_data
 
 
-def doNN(input_data, all_samples):
+def doNN(train_data, apply_data):
+    import visualize
     from os import environ
     environ['KERAS_BACKEND'] = 'tensorflow'
     from keras.models import Sequential
     from keras.layers import Dense, Dropout
     from keras.callbacks import ModelCheckpoint, EarlyStopping
-    from sklearn.preprocessing import StandardScaler
+    from sklearn.preprocessing import StandardScaler, MinMaxScaler
+    from sklearn.model_selection import train_test_split
 
 
     model = Sequential()
-    model.add(Dense(1, input_shape=(2,), name='input', activation='sigmoid'))
+    model.add(Dense(4, input_shape=(2,), name='input', activation='relu'))
+    model.add(Dense(1, activation='relu'))
     # model.summary()
     model.compile(optimizer='adam', loss='binary_crossentropy',
                 metrics=['accuracy'])
@@ -104,50 +114,63 @@ def doNN(input_data, all_samples):
                         )
     ]
 
-    scaled_input_data = pd.DataFrame(StandardScaler().fit_transform(input_data[['m_sv', 'NN_disc']].values), columns=input_data[['m_sv', 'NN_disc']].columns.values)
-    input_data.loc[:, 'm_sv'] = scaled_input_data['m_sv'].values
-    input_data.loc[:, 'NN_disc'] = scaled_input_data['NN_disc'].values
-    scaled_all_samples = pd.DataFrame(StandardScaler().fit_transform(all_samples[['m_sv', 'NN_disc']].values), columns=all_samples[['m_sv', 'NN_disc']].columns.values)
-    all_samples.loc[:, 'm_sv'] = scaled_all_samples['m_sv'].values
-    all_samples.loc[:, 'NN_disc'] = scaled_all_samples['NN_disc'].values
+    scaled_train_data = pd.DataFrame(StandardScaler().fit_transform(train_data[['m_sv', 'NN_disc_vbf']].values), columns=train_data[['m_sv', 'NN_disc_vbf']].columns.values)
+    scaled_apply_data = pd.DataFrame(StandardScaler().fit_transform(apply_data[['m_sv', 'NN_disc_vbf']].values), columns=apply_data[['m_sv', 'NN_disc_vbf']].columns.values)
+    scaled_train_data['evtwt'] = MinMaxScaler(
+        feature_range=(1., 2.)
+    ).fit_transform(
+        train_data['evtwt'].values.reshape(-1, 1)
+    )
+    scaled_train_data['isSignal'] = train_data['isSignal'].values
+    scaled_apply_data['name'] = apply_data['name'].values
+    scaled_apply_data['idx'] = apply_data['idx'].values
 
-    history = model.fit(input_data[['m_sv', 'NN_disc']].values, input_data['isSignal'].values, shuffle=True,
-                        epochs=10000, batch_size=1024, verbose=True,
-                        callbacks=callbacks, validation_split=0.25, sample_weight=input_data['evtwt'].values
+    training_data, _, training_labels, _, training_weights, _  = train_test_split(
+        scaled_train_data[['m_sv', 'NN_disc_vbf']].values, scaled_train_data['isSignal'].values, scaled_train_data['evtwt'].values,
+        test_size=0, random_state=7
+    )
+
+    history = model.fit(training_data, training_labels, shuffle=True,
+                        epochs=10000, batch_size=512, verbose=True,
+                        callbacks=callbacks, validation_split=0.25, sample_weight=training_weights
                         )
+    visualize.trainingPlots(history, 'trainingPlot_Perceptron')
 
-    all_samples['super'] = model.predict(all_samples[['m_sv', 'NN_disc']].values)
-    return all_samples
+    scaled_apply_data['super'] = model.predict(scaled_apply_data[['m_sv', 'NN_disc_vbf']].values)
+    print scaled_apply_data[(scaled_apply_data['name'] == 'vbf_inc')]['super']
+    return scaled_apply_data
 
-    
 
 def main(args):
-    prefix = '/afs/hep.wisc.edu/home/tmitchel/private/higgsToTauTau/ltau_analyzer/CMSSW_9_4_0/src/ltau_analyzers/Output/trees/mutau2016_official_v1p3_NNed/'
+    prefix = './output_files/mutau2016_official_v1p5-no-msv/'
 
     sig_names = ['ggh_madgraph_twojet']
     bkg_names = ['embedded', 'TTT', 'TTJ', 'ZJ', 'ZL', 'VVJ', 'VVT', 'W']
+    others = [ifile.split('/')[-1].split('.root')[0] for ifile in glob('{}/*.root'.format(prefix))]
+    for sample in sig_names + bkg_names:
+        others.remove(sample)
 
-    sig = build_signal(['{}/{}.root'.format(prefix, name)
-                        for name in sig_names])
-    bkg = build_background(['{}/{}.root'.format(prefix, name)
-                            for name in bkg_names])
+    train_sig, apply_sig = build_dataframe(['{}/{}.root'.format(prefix, name)
+                        for name in sig_names], True)
+    train_bkg, apply_bkg = build_dataframe(['{}/{}.root'.format(prefix, name)
+                            for name in bkg_names], False)
+    train_other, apply_other = build_dataframe(['{}/{}.root'.format(prefix, name)
+                            for name in others], False)
 
-    input_data = pd.concat([sig, bkg])
-
-    file_names = [ifile for ifile in glob('{}/*.root'.format(prefix))]
-    all_samples = build_signal(file_names)
-    all_samples.set_index('idx', inplace=True)
+    train_data = pd.concat([train_sig, train_bkg])
+    apply_data = pd.concat([apply_sig, apply_bkg, apply_other])
 
     if args.doLDA:
-        all_samples = doLDA(input_data, all_samples)
+        filled_data = doLDA(train_data, apply_data)
     elif args.doNN:
-        all_samples = doNN(input_data, all_samples)
+        filled_data = doNN(train_data, apply_data)
     
+    file_names = [ifile for ifile in glob('{}/*.root'.format(prefix))]
     for iname in file_names:
         name = iname.split('/')[-1].split('.root')[0]
-        insert(all_samples[(all_samples['name'] == name)],
+        print name
+        insert(filled_data[(filled_data['name'] == name)],
                prefix+name+'.root', args.treename)
-
 
 
 if __name__ == "__main__":
