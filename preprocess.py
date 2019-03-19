@@ -105,7 +105,7 @@ def loadFile(ifile, open_file, itree, category):
         'index': index,
         'somenames': np.full(len(slim_df), filename.split('.root')[0]),
         'lepton': np.full(len(slim_df), channel),
-        'syst': np.full(len(slim_df), syst)
+        'syst': np.full(len(slim_df), syst.replace(';1', ''))
     }
 
 
