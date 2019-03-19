@@ -52,36 +52,39 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
 
   ## now let's try and get this into the root file
   root_file = TFile(ifile, 'READ')
-  itree = root_file.Get(args.treename)
+  for ikey in root_file.GetListOfKeys():
+    if not '_tree' in ikey.GetName():
+      continue
+    itree = root_file.Get(ikey.GetName())
 
-  oname = ifile.split('/')[-1].split('.root')[0]
-  fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
-  fout.cd()
-  nevents = root_file.Get('nevents').Clone()
-  nevents.Write()
-  ntree = itree.CloneTree(-1, 'fast')
-
-  branch_var = array('f', [0.])
-  branch_var_vbf = array('f', [0.])
-  branch_var_boost = array('f', [0.])
-  disc_branch = ntree.Branch('NN_disc', branch_var, 'NN_disc/F')
-  disc_branch_vbf = ntree.Branch('NN_disc_vbf', branch_var_vbf, 'NN_disc_vbf/F')
-  disc_branch_boost = ntree.Branch('NN_disc_boost', branch_var_boost, 'NN_disc_boost/F')
-  nevts = ntree.GetEntries()
-  
-  evt_index = 0
-  for _ in itree:
-    if evt_index % 100000 == 0 and evt_index > 0:
-      print 'Process: {} has completed: {} events out of {}'.format(fname, evt_index, nevts)
-    branch_var[0] = vbf_pred.getGuess(evt_index)
-    branch_var_vbf[0] = vbf_pred.getGuess(evt_index)
-    branch_var_boost[0] = boost_pred.getGuess(evt_index)
-    
-    evt_index += 1
+    oname = ifile.split('/')[-1].split('.root')[0]
+    fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
     fout.cd()
-    disc_branch.Fill()
-    disc_branch_vbf.Fill()
-    disc_branch_boost.Fill()
+    nevents = root_file.Get('nevents').Clone()
+    nevents.Write()
+    ntree = itree.CloneTree(-1, 'fast')
+
+    branch_var = array('f', [0.])
+    branch_var_vbf = array('f', [0.])
+    branch_var_boost = array('f', [0.])
+    disc_branch = ntree.Branch('NN_disc', branch_var, 'NN_disc/F')
+    disc_branch_vbf = ntree.Branch('NN_disc_vbf', branch_var_vbf, 'NN_disc_vbf/F')
+    disc_branch_boost = ntree.Branch('NN_disc_boost', branch_var_boost, 'NN_disc_boost/F')
+    nevts = ntree.GetEntries()
+    
+    evt_index = 0
+    for _ in itree:
+      if evt_index % 100000 == 0 and evt_index > 0:
+        print 'Process: {} has completed: {} events out of {}'.format(fname, evt_index, nevts)
+      branch_var[0] = vbf_pred.getGuess(evt_index)
+      branch_var_vbf[0] = vbf_pred.getGuess(evt_index)
+      branch_var_boost[0] = boost_pred.getGuess(evt_index)
+      
+      evt_index += 1
+      fout.cd()
+      disc_branch.Fill()
+      disc_branch_vbf.Fill()
+      disc_branch_boost.Fill()
 
   root_file.Close()
   fout.cd()
