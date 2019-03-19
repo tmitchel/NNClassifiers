@@ -1,7 +1,8 @@
 from sklearn.model_selection import train_test_split
 from os import environ
+from time import time
 environ['KERAS_BACKEND'] = 'tensorflow'
-from keras.callbacks import ModelCheckpoint, EarlyStopping
+from keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from keras.layers import Dense, Dropout
 from keras.models import Sequential
 from keras import optimizers
@@ -15,12 +16,12 @@ def main(args):
     ## define training variables
     if args.category == 'vbf':
         training_variables = [
-            'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
+           'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
             'costheta2', 'costhetastar'
         ]
     elif args.category == 'boosted':
         training_variables = [
-            'higgs_pT', 't1_pt', 'lt_dphi', 'lep_pt', 'hj_dphi',# 'MT_lepMET', 'MT_HiggsMET'
+            'higgs_pT', 't1_pt', 'lt_dphi', 'lep_pt', 'hj_dphi', 'MT_lepMET', 'MT_HiggsMET', 'met', 'm_sv'
         ]
     else:
         raise Exception('{} isn\'t an acceptable category')
@@ -29,8 +30,9 @@ def main(args):
 
     model = Sequential()
     model.add(Dense(nvars*2, input_shape=(nvars,), name='input', activation='relu'))
-    model.add(Dense(nvars, name='hidden', activation='relu'))
-    model.add(Dense(1, activation='sigmoid', kernel_initializer='normal'))
+    # model.add(Dropout(0.1))
+    model.add(Dense(nvars, name='hidden', activation='relu', kernel_initializer='normal'))
+    model.add(Dense(1, name='output', activation='sigmoid', kernel_initializer='normal'))
     model.summary()
     model.compile(optimizer='adam', loss='binary_crossentropy',
                 metrics=['accuracy'])
@@ -42,7 +44,8 @@ def main(args):
                         verbose=0, save_best_only=True,
                         save_weights_only=False, mode='auto',
                         period=1
-                        )
+                        ),
+        TensorBoard(log_dir="logs/{}".format(time()), histogram_freq=200, write_grads=False, write_images=True)
     ]
 
     ## get the data for the two-classes to discriminate
@@ -88,7 +91,7 @@ def main(args):
     
     training_data, testing_data, training_labels, testing_labels, training_weights, testing_weights  = train_test_split(
         training_dataframe[training_variables].values, training_dataframe['isSignal'].values, training_dataframe['evtwt'].values,
-        test_size=0.1, random_state=7
+        test_size=0.85, random_state=7
     )
 
     ## train that there model, my dude
