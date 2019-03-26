@@ -116,7 +116,13 @@ def main(args):
     if not path.isdir(args.output_dir):
         mkdir(args.output_dir)
 
-    file_names = [ifile for ifile in glob('{}/*.root'.format(args.input_dir))]
+    file_names = []
+    if args.input_dir != None and args.single_file == None:
+      file_names = [ifile for ifile in glob('{}/*.root'.format(args.input_dir))]
+    elif args.input_dir == None and args.single_file != None:
+      file_names = [args.single_file]
+    else:
+      raise Exception('Can\'t use single file and full directory options together')
 
     keep_vbf = [
       'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 
@@ -145,7 +151,8 @@ if __name__ == "__main__":
     parser.add_argument('--model-boost', action='store', dest='model_boost', default=None, help='name of model to use')
     parser.add_argument('--input-vbf', action='store', dest='input_vbf', default=None, help='name of input dataset')
     parser.add_argument('--input-boost', action='store', dest='input_boost', default=None, help='name of input dataset')
-    parser.add_argument('--dir', '-d', action='store', dest='input_dir', default='input_files/etau_stable_Oct24', help='name of ROOT input directory')
+    parser.add_argument('--dir', '-d', action='store', dest='input_dir', default=None, help='name of ROOT input directory')
     parser.add_argument('--output-dir', '-o', action='store', dest='output_dir', default='output_files', help='name of directory for output')
+    parser.add_argument('--file', '-f', action='store', dest='single_file', default='test.root', help='name of directory for output')
 
     main(parser.parse_args())
