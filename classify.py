@@ -36,12 +36,15 @@ class Predictor:
       self.data_copy['guess'] = guesses
       self.data_copy.set_index('idx', inplace=True)
 
-  def getGuess(self, index):
+  def getGuess(self, index, syst='tree'):
     try:
-      guess = self.data_copy.loc[index, 'guess']
+      guess = self.current_tree.loc[index, 'guess']
     except:
       guess = -999
     return guess
+
+  def setTree(self, syst='tree'):
+    self.current_tree = self.data_copy[(self.data_copy['syst'] == syst)]
 
 def fillFile(ifile, channel, args, vbf_pred, boost_pred):
   fname = ifile.split('/')[-1].split('.root')[0]
@@ -50,18 +53,26 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
   vbf_pred.make_prediction(fname, channel)
   boost_pred.make_prediction(fname, channel)
 
-  ## now let's try and get this into the root file
   root_file = TFile(ifile, 'READ')
+  oname = ifile.split('/')[-1].split('.root')[0]
+  fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
+  fout.cd()
+  nevents = root_file.Get('nevents').Clone()
+  nevents.Write()
+  
+  ## now let's try and get this into the root file
+  print 'Reading input file {}'.format(ifile)
   for ikey in root_file.GetListOfKeys():
+    print ikey.GetName()
     if not '_tree' in ikey.GetName():
       continue
     itree = root_file.Get(ikey.GetName())
+    syst_label = ikey.GetName().replace('mutau_', '')
+    syst_label = syst_label.replace('etau_', '')
+    vbf_pred.setTree(syst_label)
+    # boost_pred.setTree(syst_label)
 
-    oname = ifile.split('/')[-1].split('.root')[0]
-    fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
     fout.cd()
-    nevents = root_file.Get('nevents').Clone()
-    nevents.Write()
     ntree = itree.CloneTree(-1, 'fast')
 
     branch_var = array('f', [0.])
@@ -86,9 +97,11 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
       disc_branch_vbf.Fill()
       disc_branch_boost.Fill()
 
+    fout.cd()
+    print 'writing tree {}'.format(ntree.GetName())
+    ntree.Write()
+
   root_file.Close()
-  fout.cd()
-  ntree.Write()
   fout.Close()
   print '{} Completed.'.format(fname)
 
@@ -117,10 +130,11 @@ def main(args):
     boost_pred = Predictor(args.input_boost, args.model_boost, keep_boost)
 
     processes = [Process(target=fillFile, args=(ifile, channel, args, vbf_pred, boost_pred)) for ifile in file_names]
-    for process in processes:
-      process.start()
+    #for process in processes:
+    #processes[0].start()
+    [fillFile(ifile, channel, args, vbf_pred, boost_pred) for ifile in file_names]
 
-    print 'Finished processing.'
+    #print 'Finished processing.'
 
 
 if __name__ == "__main__":
