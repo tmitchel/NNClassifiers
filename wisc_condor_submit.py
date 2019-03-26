@@ -7,7 +7,7 @@ def main(args):
     '''
     Submit a job using farmoutAnalysisJobs --fwklite
     '''
-    print "Begin NN classifying"
+    print "Begin NN classifying with Condor"
     jobName = args.jobName
     sampledir = args.sampledir
     sample_name = os.path.basename(sampledir)
@@ -31,8 +31,8 @@ def main(args):
     os.system('mkdir -p %s' % (dag_dir+'inputs'))
 
     # output dir
-    output_dir = 'gsiftp://cms-lvs-gridftp.hep.wisc.edu:2811//hdfs/store/user/%s/%s/%s/'\
-        % (pwd.getpwuid(os.getuid())[0], jobName, args.samplename)
+    output_dir = 'gsiftp://cms-lvs-gridftp.hep.wisc.edu:2811//hdfs/store/user/%s/%s/'\
+        % (pwd.getpwuid(os.getuid())[0], jobName)
 
     # create file list
     filelist = ['%s/%s' % (sampledir, x) for x in os.listdir(sampledir)]
@@ -45,8 +45,15 @@ def main(args):
     # create bash script
     bash_name = '%s/%s.sh' % (dag_dir+'inputs', args.samplename)
     bashScript = "#!/bin/bash\n value=$(<$INPUT)\n echo \"$value\"\n"
-    bashScript += '$CMSSW_BASE/bin/$SCRAM_ARCH/uniSkim -d %s -j %s -r %s -y %s -l %s -i $value -o \'$OUTPUT\'' % (
-        args.samplename, args.job, args.recoil, args.year, args.lepton)
+
+
+    command = 'python condor_classify.py -t {} -o output_files -f $value '.format(args.channel)
+    if args.model_vbf != None and args.input_vbf != None:
+        command += '--model-vbf {} --input-vbf {}'.format(args.model_vbf, args.input_vbf)
+    if args.model_boost != None and args.input_boost != None:
+        command += '--model-boost {} --input-boost {}'.format(args.model_boost, args.input_boost)
+    bashScript += command
+
     bashScript += '\n'
     with open(bash_name, 'w') as file:
         file.write(bashScript)
@@ -72,19 +79,15 @@ def main(args):
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Run the desired analyzer on FSA n-tuples")
-    parser.add_argument('-dr', '--dryrun', action='store_true',
-                        help='Create jobs but dont submit')
-    parser.add_argument('-j', '--job', action='store', help='job type')
-    parser.add_argument('-l', '--lepton', action='store', help='which lepton')
-    parser.add_argument('-y', '--year', action='store', help='which year')
-    parser.add_argument('-r', '--recoil', action='store', help='recoil type')
-    parser.add_argument('-jn', '--jobName', nargs='?', type=str,
-                        const='', help='Job Name for condor submission')
-    parser.add_argument('-sn', '--samplename', nargs='?',
-                        type=str, const='', help='Name of samples')
-    parser.add_argument('-sd', '--sampledir', nargs='?',
-                        type=str, const='', help='The Sample Input directory')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-dr', '--dryrun', action='store_true', help='Create jobs but dont submit')
+    parser.add_argument('-c', '--channel', action='store', help='name of channel [etau, mutau]')
+    parser.add_argument('--model-vbf', action='store', dest='model_vbf', default=None, help='name of model to use')
+    parser.add_argument('--model-boost', action='store', dest='model_boost', default=None, help='name of model to use')
+    parser.add_argument('--input-vbf', action='store', dest='input_vbf', default=None, help='name of input dataset')
+    parser.add_argument('--input-boost', action='store', dest='input_boost', default=None, help='name of input dataset')
+    parser.add_argument('-jn', '--jobName', nargs='?', type=str, const='', help='Job Name for condor submission')
+    parser.add_argument('-sn', '--samplename', nargs='?', type=str, const='', help='Name of samples')
+    parser.add_argument('-sd', '--sampledir', nargs='?', type=str, const='', help='The Sample Input directory')
     args = parser.parse_args()
     main(args)
