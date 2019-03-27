@@ -11,24 +11,27 @@ def main(args):
     jobName = args.jobName
     sampledir = args.sampledir
     sample_name = os.path.basename(sampledir)
-    print "sample_name:", args.samplename
     if sample_name == '':
         print "SAMPLE_NAME not defined, check for trailing '/' on sampledir path"
         return
     else:
-        sample_dir = '/nfs_scratch/%s/%s/%s' % (
-            pwd.getpwuid(os.getuid())[0], jobName, args.samplename)
+        sample_dir = '/nfs_scratch/%s/%s' % (
+            pwd.getpwuid(os.getuid())[0], jobName)
 
     # create submit dir
     submit_dir = '%s/submit' % (sample_dir)
     if os.path.exists(submit_dir):
-        print('Submission directory exists for %s %s.' %
-              (jobName, args.samplename))
+        print('Submission directory exists for %s.' %
+              (jobName))
 
     # create dag dir
     dag_dir = '%s/dags/dag' % (sample_dir)
     os.system('mkdir -p %s' % (os.path.dirname(dag_dir)))
     os.system('mkdir -p %s' % (dag_dir+'inputs'))
+
+    os.system('cp condor_classify.py ${CMSSW_BASE}/bin/${SCRAM_ARCH}')
+    os.system('cp {} {}'.format(args.model_vbf, sample_dir))
+    os.system('cp {} {}'.format(args.input_vbf, sample_dir))
 
     # output dir
     output_dir = 'gsiftp://cms-lvs-gridftp.hep.wisc.edu:2811//hdfs/store/user/%s/%s/'\
@@ -37,23 +40,27 @@ def main(args):
     # create file list
     filelist = ['%s/%s' % (sampledir, x) for x in os.listdir(sampledir)]
     filesperjob = 1
-    input_name = '%s/%s.txt' % (dag_dir+'inputs', args.samplename)
+    input_name = '%s/inputs.txt' % (dag_dir+'inputs')
     with open(input_name, 'w') as file:
         for f in filelist:
             file.write('%s\n' % f.replace('/hdfs', '', 1))
 
+    just_model = args.model_vbf.replace('models/', '')
+    just_dataset = args.input_vbf.replace('datasets/', '')
+
     # create bash script
-    bash_name = '%s/%s.sh' % (dag_dir+'inputs', args.samplename)
+    bash_name = '%s/submit.sh' % (dag_dir+'inputs')
     bashScript = "#!/bin/bash\n value=$(<$INPUT)\n echo \"$value\"\n"
 
-
-    command = 'python condor_classify.py -t {} -o output_files -f $value '.format(args.channel)
+    bashScript += '\n echo `pwd`\n echo `ls */`\n'
+    command = 'python ${{CMSSW_BASE}}/bin/${{SCRAM_ARCH}}/condor_classify.py -t {} -o \'$OUTPUT\' -f $value '.format(args.channel)
     if args.model_vbf != None and args.input_vbf != None:
-        command += '--model-vbf {} --input-vbf {}'.format(args.model_vbf, args.input_vbf)
+        command += '--model-vbf {} --input-vbf {}'.format(just_model, just_dataset)
     if args.model_boost != None and args.input_boost != None:
         command += '--model-boost {} --input-boost {}'.format(args.model_boost, args.input_boost)
     bashScript += command
-
+    bashScript += '\necho $OUTPUT \'$OUTPUT\''
+    bashScript += '\n echo `pwd`\n echo `ls */`\n'
     bashScript += '\n'
     with open(bash_name, 'w') as file:
         file.write(bashScript)
@@ -67,9 +74,11 @@ def main(args):
     farmoutString += ' --input-files-per-job=%i %s %s ' % (
         filesperjob, jobName, bash_name)
     farmoutString += '--use-hdfs'
+    farmoutString += ' --extra-inputs={}/{},{}/{}'.format(sample_dir, just_model, sample_dir, just_dataset)
+    farmoutString += ' --vsize-limit=10000'
 
     if not args.dryrun:
-        print('Submitting %s' % args.samplename)
+        print('Submitting %s' % args.jobName)
         os.system(farmoutString)
     else:
         print farmoutString
@@ -87,7 +96,6 @@ if __name__ == '__main__':
     parser.add_argument('--input-vbf', action='store', dest='input_vbf', default=None, help='name of input dataset')
     parser.add_argument('--input-boost', action='store', dest='input_boost', default=None, help='name of input dataset')
     parser.add_argument('-jn', '--jobName', nargs='?', type=str, const='', help='Job Name for condor submission')
-    parser.add_argument('-sn', '--samplename', nargs='?', type=str, const='', help='Name of samples')
     parser.add_argument('-sd', '--sampledir', nargs='?', type=str, const='', help='The Sample Input directory')
     args = parser.parse_args()
     main(args)

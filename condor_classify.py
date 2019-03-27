@@ -12,6 +12,7 @@ class Predictor:
     self.bad = False
     self.keep = keep
     self.data_copy = pd.DataFrame()
+    
     # open the input data
     try:
       self.data = pd.HDFStore(data_name)['df']
@@ -20,7 +21,7 @@ class Predictor:
 
     # open the trained model
     try:
-      self.model = load_model('models/{}.hdf5'.format(model_name))
+      self.model = load_model(model_name)
     except:
       self.bad = True
 
@@ -51,11 +52,13 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
   print 'Starting process for file: {}'.format(fname)
 
   vbf_pred.make_prediction(fname, channel)
-  boost_pred.make_prediction(fname, channel)
+  #boost_pred.make_prediction(fname, channel)
 
   root_file = TFile(ifile, 'READ')
   oname = ifile.split('/')[-1].split('.root')[0]
-  fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
+#  fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
+  fout = TFile(args.output_dir, 'recreate')  ## make new file for output
+
   fout.cd()
   nevents = root_file.Get('nevents').Clone()
   nevents.Write()
@@ -85,11 +88,11 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
     
     evt_index = 0
     for _ in itree:
-      if evt_index % 100000 == 0 and evt_index > 0:
+      if evt_index % 200000 == 0 and evt_index > 0:
         print 'Process: {} has completed: {} events out of {}'.format(fname, evt_index, nevts)
       branch_var[0] = vbf_pred.getGuess(evt_index)
       branch_var_vbf[0] = vbf_pred.getGuess(evt_index)
-      branch_var_boost[0] = boost_pred.getGuess(evt_index)
+      #branch_var_boost[0] = boost_pred.getGuess(evt_index)
       
       evt_index += 1
       fout.cd()
@@ -113,8 +116,8 @@ def main(args):
     else:
         raise Exception('Hey. Bad channel. No. Try again.')
 
-    if not path.isdir(args.output_dir):
-        mkdir(args.output_dir)
+    # if not path.isdir(args.output_dir):
+    #     mkdir(args.output_dir)
 
     file_names = []
     if args.input_dir != None and args.single_file == None:
