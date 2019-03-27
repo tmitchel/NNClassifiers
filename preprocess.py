@@ -71,8 +71,8 @@ def loadFile(ifile, open_file, itree, category):
     slim_df = slim_df.drop(['el_pt', 'mu_pt'], axis=1)
 
     # add Dbkg_VBF
-    slim_df['Dbkg_VBF'] = slim_df['ME_sm_VBF'] / (45 * slim_df['ME_bkg'] + slim_df['ME_sm_VBF'])
-    slim_df = slim_df.drop(['ME_sm_VBF', 'ME_bkg'], axis=1)
+    # slim_df['Dbkg_VBF'] = slim_df['ME_sm_VBF'] / (45 * slim_df['ME_bkg'] + slim_df['ME_sm_VBF'])
+    # slim_df = slim_df.drop(['ME_sm_VBF', 'ME_bkg'], axis=1)
 
     # get variables needed for selection (so they aren't normalized)
     selection_df = slim_df[selection_vars]
@@ -164,7 +164,7 @@ def main(args):
     scaled_data['idx'] = pd.Series(index)
 
     # save the dataframe for later
-    store = pd.HDFStore('datasets/{}.h5'.format(args.output))
+    store = pd.HDFStore('datasets/{}.h5'.format(args.output), complevel=9, complib='bzip2')
     store['df'] = scaled_data
 
 
