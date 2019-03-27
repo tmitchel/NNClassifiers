@@ -57,7 +57,8 @@ def main(args):
     vbf_processes = training_processes[
         (training_processes['is_signal'] > 0) &
         (training_processes['mt'] < 50) &
-        (training_processes['OS'] > 0)
+        (training_processes['OS'] > 0) &
+        (training_processes['syst'] == 'tree') # don't use systetmatic trees
         ]
 
     print 'No. Signal Events:     {}'.format(len(vbf_processes[vbf_processes['sample_names'] == args.signal]))
@@ -101,11 +102,6 @@ def main(args):
                         )
 
     if not args.dont_plot:
-        ROC_curve(training_data, training_labels, training_weights, model, 'ROC_training_{}'.format(args.model), 'red')
-        ROC_curve(testing_data, testing_labels[:], testing_weights[:], model, 'ROC_testing_{}'.format(args.model), 'cyan')
-
-        trainingPlots(history, 'trainingPlot_{}'.format(args.model))
-
         test_sig, test_bkg = [], []
         for i in range(len(testing_labels)):
             if testing_labels[i] == 1:

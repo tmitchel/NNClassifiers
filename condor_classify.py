@@ -12,6 +12,7 @@ class Predictor:
     self.bad = False
     self.keep = keep
     self.data_copy = pd.DataFrame()
+    
     # open the input data
     try:
       self.data = pd.HDFStore(data_name)['df']
@@ -20,7 +21,7 @@ class Predictor:
 
     # open the trained model
     try:
-      self.model = load_model('models/{}.hdf5'.format(model_name))
+      self.model = load_model(model_name)
     except:
       self.bad = True
 
@@ -51,11 +52,13 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
   print 'Starting process for file: {}'.format(fname)
 
   vbf_pred.make_prediction(fname, channel)
-  boost_pred.make_prediction(fname, channel)
+  #boost_pred.make_prediction(fname, channel)
 
   root_file = TFile(ifile, 'READ')
   oname = ifile.split('/')[-1].split('.root')[0]
-  fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
+#  fout = TFile('{}/{}.root'.format(args.output_dir, oname), 'recreate')  ## make new file for output
+  fout = TFile(args.output_dir, 'recreate')  ## make new file for output
+
   fout.cd()
   nevents = root_file.Get('nevents').Clone()
   nevents.Write()
@@ -85,11 +88,11 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
     
     evt_index = 0
     for _ in itree:
-      if evt_index % 100000 == 0 and evt_index > 0:
+      if evt_index % 200000 == 0 and evt_index > 0:
         print 'Process: {} has completed: {} events out of {}'.format(fname, evt_index, nevts)
       branch_var[0] = vbf_pred.getGuess(evt_index)
       branch_var_vbf[0] = vbf_pred.getGuess(evt_index)
-      branch_var_boost[0] = boost_pred.getGuess(evt_index)
+      #branch_var_boost[0] = boost_pred.getGuess(evt_index)
       
       evt_index += 1
       fout.cd()
@@ -113,10 +116,16 @@ def main(args):
     else:
         raise Exception('Hey. Bad channel. No. Try again.')
 
-    if not path.isdir(args.output_dir):
-        mkdir(args.output_dir)
+    # if not path.isdir(args.output_dir):
+    #     mkdir(args.output_dir)
 
-    file_names = [ifile for ifile in glob('{}/*.root'.format(args.input_dir))]
+    file_names = []
+    if args.input_dir != None and args.single_file == None:
+      file_names = [ifile for ifile in glob('{}/*.root'.format(args.input_dir))]
+    elif args.input_dir == None and args.single_file != None:
+      file_names = [args.single_file]
+    else:
+      raise Exception('Can\'t use single file and full directory options together')
 
     keep_vbf = [
       'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 
@@ -145,7 +154,8 @@ if __name__ == "__main__":
     parser.add_argument('--model-boost', action='store', dest='model_boost', default=None, help='name of model to use')
     parser.add_argument('--input-vbf', action='store', dest='input_vbf', default=None, help='name of input dataset')
     parser.add_argument('--input-boost', action='store', dest='input_boost', default=None, help='name of input dataset')
-    parser.add_argument('--dir', '-d', action='store', dest='input_dir', default='input_files/etau_stable_Oct24', help='name of ROOT input directory')
+    parser.add_argument('--dir', '-d', action='store', dest='input_dir', default=None, help='name of ROOT input directory')
     parser.add_argument('--output-dir', '-o', action='store', dest='output_dir', default='output_files', help='name of directory for output')
+    parser.add_argument('--file', '-f', action='store', dest='single_file', default='test.root', help='name of directory for output')
 
     main(parser.parse_args())
