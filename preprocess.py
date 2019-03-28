@@ -17,13 +17,16 @@ selection_vars = [
 ]
 
 # Variables that could be used as NN input. These should be normalized
-scaled_vars = [
-    'evtwt', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
-    'costheta2', 'costhetastar', 'mjj', 'higgs_pT', 'm_sv',
-    't1_pt', 'MT_t2MET', 'MT_HiggsMET', 'jmet_dphi',
-    'lt_dphi', 'el_pt', 'mu_pt', 'hj_dphi', 'MT_lepMET', 'met',
-    'ME_sm_VBF', 'ME_bkg'
-]
+scaled_vars = {
+    'vbf': [
+        'evtwt', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
+        'costheta2', 'costhetastar', 'mjj', 'higgs_pT', 'm_sv',
+    ],
+    'boosted': [
+        'evtwt', 'higgs_pT', 't1_pt', 'lt_dphi', 'lep_pt',
+        'hj_dphi', 'MT_lepMET', 'MT_HiggsMET', 'met'
+    ]
+}
 
 def loadFile(ifile, open_file, itree, category):
     if 'mutau' in ifile:
@@ -40,7 +43,7 @@ def loadFile(ifile, open_file, itree, category):
     print 'Loading input file...', filename, itree
 
     todrop = ['evtwt', 'idx']
-    columns = scaled_vars + selection_vars
+    columns = scaled_vars[category] + selection_vars
     if 'vbf_inc' in ifile:
         columns = columns + ['wt_a1']
         todrop = todrop + ['wt_a1']
@@ -64,15 +67,12 @@ def loadFile(ifile, open_file, itree, category):
     slim_df = slim_df.dropna(axis=0, how='any')  # drop events with a NaN
 
     # combine lepton pT's
-    if channel == 'mt':
-        slim_df['lep_pt'] = slim_df['mu_pt'].copy()
-    elif channel == 'et':
-        slim_df['lep_pt'] = slim_df['el_pt'].copy()
-    slim_df = slim_df.drop(['el_pt', 'mu_pt'], axis=1)
-
-    # add Dbkg_VBF
-    # slim_df['Dbkg_VBF'] = slim_df['ME_sm_VBF'] / (45 * slim_df['ME_bkg'] + slim_df['ME_sm_VBF'])
-    # slim_df = slim_df.drop(['ME_sm_VBF', 'ME_bkg'], axis=1)
+    if category == 'boosted':
+        if channel == 'mt':
+            slim_df['lep_pt'] = slim_df['mu_pt'].copy()
+        elif channel == 'et':
+            slim_df['lep_pt'] = slim_df['el_pt'].copy()
+        slim_df = slim_df.drop(['el_pt', 'mu_pt'], axis=1)
 
     # get variables needed for selection (so they aren't normalized)
     selection_df = slim_df[selection_vars]
@@ -105,8 +105,7 @@ def loadFile(ifile, open_file, itree, category):
         'index': index,
         'somenames': np.full(len(slim_df), filename.split('.root')[0]),
         'lepton': np.full(len(slim_df), channel),
-        'syst': np.full(len(slim_df), syst.replace(';1', ''))
-    }
+    }, syst.replace(';1', '')
 
 
 def main(args):
@@ -117,10 +116,16 @@ def main(args):
         ifile for ifile in glob('{}/*.root'.format(args.mu_input_dir)) if args.mu_input_dir != None
     ]
 
-    # define collections that will all be merged in the end
-    unscaled_data, selection_df = pd.DataFrame(), pd.DataFrame()
-    names, leptons, isSignal, weight_df, index, systs = np.array(
-        []), np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
+    all_data = {}
+    default_object = {
+        'unscaled': pd.DataFrame(),
+        'selection': pd.DataFrame(),
+        'names': np.array([]),
+        'leptons': np.array([]),
+        'isSignal': np.array([]),
+        'weights': np.array([]),
+        'index': np.array([]),
+    }
 
     for ifile in input_files:
         open_file = uproot.open(ifile)
@@ -130,42 +135,61 @@ def main(args):
             # TEMPORARY
             if 'tau_tree_jetVeto30_JetTotal' in ikey:
                 continue
-            proc_file = loadFile(ifile, open_file, ikey, args.category)
+
+            proc_file, syst = loadFile(ifile, open_file, ikey, args.category)
+            all_data.setdefault(syst, default_object.copy())
+
             # add data to the full set
-            unscaled_data = pd.concat([unscaled_data, proc_file['slim_df']])
+            all_data[syst]['unscaled'] = pd.concat([all_data[syst]['unscaled'], proc_file['slim_df']])
             # add selection variables to full set
-            selection_df = pd.concat([selection_df, proc_file['selection_df']])
+            all_data[syst]['selection'] = pd.concat([all_data[syst]['selection'], proc_file['selection_df']])
             # insert the name of the current sample
-            names = np.append(names, proc_file['somenames'])
+            all_data[syst]['names'] = np.append(all_data[syst]['names'], proc_file['somenames'])
             # labels for signal/background
-            isSignal = np.append(isSignal, proc_file['isSignal'])
+            all_data[syst]['isSignal'] = np.append(all_data[syst]['isSignal'], proc_file['isSignal'])
             # weights scaled from 0 - 1
-            weight_df = np.append(weight_df, proc_file['weights'])
-            leptons = np.append(leptons, proc_file['lepton'])  # lepton channel
-            index = np.append(index, proc_file['index'])
-            systs = np.append(systs, proc_file['syst'])
+            all_data[syst]['weights'] = np.append(all_data[syst]['weights'], proc_file['weights'])
+            all_data[syst]['leptons'] = np.append(all_data[syst]['leptons'], proc_file['lepton'])  # lepton channel
+            all_data[syst]['index'] = np.append(all_data[syst]['index'], proc_file['index'])
+
+    # create the store
+    store = pd.HDFStore('datasets/{}.h5'.format(args.output), complevel=9, complib='bzip2')
 
     # normalize the potential training variables
-    scaled_data = pd.DataFrame(
-        StandardScaler().fit_transform(unscaled_data.values),
-        columns=unscaled_data.columns.values
-    )
+    scaler = StandardScaler()
+    scaler.fit(all_data['tree']['unscaled'].values) # only fit the nominal data
+    scaler_info = pd.DataFrame.from_dict({
+        'mean': scaler.mean_,
+        'scale': scaler.scale_,
+        'variance': scaler.var_,
+        'nsamples': scaler.n_samples_seen_
+    })
+    scaler_info.set_index(all_data['tree']['unscaled'].columns.values, inplace=True)
+    store['scaler'] = scaler_info # save scaling info
 
-    # add selection variables
-    for column in selection_df.columns:
-        scaled_data[column] = selection_df[column].values
+    formatted_data = {}
+    for syst in all_data.keys():
+        formatted_data[syst] = pd.DataFrame(
+            scaler.transform(all_data[syst]['unscaled'].values),
+            columns=all_data[syst]['unscaled'].columns.values)
 
-    # add other useful data
-    scaled_data['sample_names'] = pd.Series(names)
-    scaled_data['lepton'] = pd.Series(leptons)
-    scaled_data['isSignal'] = pd.Series(isSignal)
-    scaled_data['evtwt'] = pd.Series(weight_df)
-    scaled_data['syst'] = pd.Series(systs)
-    scaled_data['idx'] = pd.Series(index)
+        # add selection variables
+        for column in all_data[syst]['selection'].columns:
+            formatted_data[syst][column] = all_data[syst]['selection'][column].values
 
-    # save the dataframe for later
-    store = pd.HDFStore('datasets/{}.h5'.format(args.output), complevel=9, complib='bzip2')
-    store['df'] = scaled_data
+        # add other useful data
+        formatted_data[syst]['sample_names'] = pd.Series(all_data[syst]['names'])
+        formatted_data[syst]['lepton'] = pd.Series(all_data[syst]['leptons'])
+        formatted_data[syst]['isSignal'] = pd.Series(all_data[syst]['isSignal'])
+        formatted_data[syst]['evtwt'] = pd.Series(all_data[syst]['weights'])
+        formatted_data[syst]['idx'] = pd.Series(all_data[syst]['index'])
+
+        for lepton in formatted_data[syst]['lepton'].unique():
+            for sample in formatted_data[syst]['sample_names'].unique():
+                filtered_data = formatted_data[syst][(formatted_data[syst]['lepton'] == lepton) & (formatted_data[syst]['sample_names'] == sample)]
+                filtered_data = filtered_data.drop(['lepton', 'sample_names'], axis=1)
+                filtered_data.set_index('idx', inplace=True)
+                store['{}/{}/{}'.format(syst, sample, lepton)] = filtered_data
 
 
 if __name__ == "__main__":
