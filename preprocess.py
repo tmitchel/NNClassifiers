@@ -64,7 +64,15 @@ def loadFile(ifile, open_file, itree, category):
     else:
         raise Exception('Not a category: {}'.format(category))
 
+    # if syst != 'tree':
+    #   slim_df = slim_df[(slim_df['is_signal'] > 0)]
+
+    # if 'ggh' in ifile.lower() or 'ggh' in ifile.lower() or 'wh_inc' in ifile or 'zh_inc' in ifile:
+    #   slim_df = slim_df[(slim_df['is_signal'] > 0)]
+
     slim_df = slim_df.dropna(axis=0, how='any')  # drop events with a NaN
+    slim_df = slim_df.drop_duplicates()
+    slim_df = slim_df[(slim_df['Q2V1'] < 1e10) & (slim_df['Q2V1'] > -1e10)]
 
     # combine lepton pT's
     if category == 'boosted':
@@ -83,6 +91,7 @@ def loadFile(ifile, open_file, itree, category):
     if 'vbf_inc' in ifile:
         weights = weights * slim_df['wt_a1']
     slim_df = slim_df.drop(selection_vars+todrop, axis=1)
+    slim_df = slim_df.astype('float64')
 
     # add the event label
     if 'vbf' in ifile.lower() or 'ggh' in ifile.lower():
@@ -118,7 +127,7 @@ def main(args):
 
     all_data = {}
     default_object = {
-        'unscaled': pd.DataFrame(),
+        'unscaled': pd.DataFrame(dtype='float64'),
         'selection': pd.DataFrame(),
         'names': np.array([]),
         'leptons': np.array([]),
@@ -173,7 +182,7 @@ def main(args):
     for syst in all_data.keys():
         formatted_data[syst] = pd.DataFrame(
             scaler.transform(all_data[syst]['unscaled'].values),
-            columns=all_data[syst]['unscaled'].columns.values)
+            columns=all_data[syst]['unscaled'].columns.values, dtype='float64')
 
         # add selection variables
         for column in all_data[syst]['selection'].columns:
@@ -185,13 +194,7 @@ def main(args):
         formatted_data[syst]['isSignal'] = pd.Series(all_data[syst]['isSignal'])
         formatted_data[syst]['evtwt'] = pd.Series(all_data[syst]['weights'])
         formatted_data[syst]['idx'] = pd.Series(all_data[syst]['index'])
-
-        for lepton in formatted_data[syst]['lepton'].unique():
-            for sample in formatted_data[syst]['sample_names'].unique():
-                filtered_data = formatted_data[syst][(formatted_data[syst]['lepton'] == lepton) & (formatted_data[syst]['sample_names'] == sample)]
-                filtered_data = filtered_data.drop(['lepton', 'sample_names'], axis=1)
-                filtered_data.set_index('idx', inplace=True)
-                store['{}/{}/{}'.format(syst, sample, lepton)] = filtered_data
+        store[syst] = formatted_data[syst]
 
 
 if __name__ == "__main__":
