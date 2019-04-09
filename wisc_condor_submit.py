@@ -53,7 +53,8 @@ def main(args):
     bashScript = "#!/bin/bash\n value=$(<$INPUT)\n echo \"$value\"\n"
 
     bashScript += '\n echo `pwd`\n echo `ls */`\n'
-    command = 'python ${{CMSSW_BASE}}/bin/${{SCRAM_ARCH}}/condor_classify.py -t {} -o \'$OUTPUT\' -f $value '.format(args.channel)
+    command = 'cp {}/{} .\n'.format(sample_dir, just_model)
+    command += 'python ${{CMSSW_BASE}}/bin/${{SCRAM_ARCH}}/condor_classify.py -t {} -o \'$OUTPUT\' -f $value '.format(args.channel)
     if args.model_vbf != None and args.input_vbf != None:
         command += '--model-vbf {} --input-vbf {}'.format(just_model, just_dataset)
     if args.model_boost != None and args.input_boost != None:
