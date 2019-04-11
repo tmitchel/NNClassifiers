@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from visualize import *
 
 def main(args):
-    data = pd.HDFStore(args.input)['df']
+    data = pd.HDFStore(args.input)['tree']
     ## define training variables
     if args.category == 'vbf':
         training_variables = [
@@ -57,8 +57,7 @@ def main(args):
     vbf_processes = training_processes[
         (training_processes['is_signal'] > 0) &
         (training_processes['mt'] < 50) &
-        (training_processes['OS'] > 0) &
-        (training_processes['syst'] == 'tree') # don't use systetmatic trees
+        (training_processes['OS'] > 0)
         ]
 
     print 'No. Signal Events:     {}'.format(len(vbf_processes[vbf_processes['sample_names'] == args.signal]))
@@ -92,7 +91,7 @@ def main(args):
     
     training_data, testing_data, training_labels, testing_labels, training_weights, testing_weights  = train_test_split(
         training_dataframe[training_variables].values, training_dataframe['isSignal'].values, training_dataframe['evtwt'].values,
-        test_size=0.85, random_state=7
+        test_size=0.05, random_state=7
     )
 
     ## train that there model, my dude
