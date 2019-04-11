@@ -16,7 +16,7 @@ def main(args):
     ## define training variables
     if args.category == 'vbf':
         training_variables = [
-           'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
+           'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
             'costheta2', 'costhetastar'
         ]
     elif args.category == 'boosted':

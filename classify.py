@@ -15,15 +15,15 @@ class Predictor:
     
     # open the input data
     try:
-      self.data = pd.HDFStore(data_name)
+      self.data = data_name
     except:
       self.bad = True
     
     # open the trained model
-    try:
-    self.model = load_model(model_name)
-    except:
-      self.bad = True
+    #try:
+    self.model = model_name
+    #except:
+    #  self.bad = True
 
   def make_prediction(self, fname, channel, syst='tree'):
     self.current_data = self.data[syst]
@@ -62,6 +62,8 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
   print 'Reading input file {}'.format(ifile)
   for ikey in keylist:
     if not '_tree' in ikey.GetName():
+      continue
+    if 'tree_' in ikey.GetName():
       continue
 
     itree = root_file.Get(ikey.GetName())
@@ -128,17 +130,24 @@ def main(args):
       'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 
       'Phi1', 'costheta1', 'costheta2', 'costhetastar'
     ]
-    vbf_pred = Predictor(args.input_vbf, args.model_vbf, keep_vbf)
+    alldata = {}
+    dataset = pd.HDFStore(args.input_vbf)
+    for key in dataset.keys():
+      print key
+      alldata[key.replace('/', '')] = dataset[key]
+    dataset.close()
+    model = load_model(args.model_vbf)
+    vbf_pred = Predictor(alldata, model, keep_vbf)
 
     keep_boost = [
              'higgs_pT', 't1_pt', 'lt_dphi', 'lep_pt', 'hj_dphi', 'MT_lepMET', 'MT_HiggsMET', 'met'
     ]
     #boost_pred = Predictor(args.input_boost, args.model_boost, keep_boost)
   
-    processes = [Process(target=fillFile, args=(ifile, channel, args, vbf_pred, boost_pred)) for ifile in file_names]
-    for process in processes:
-      processes[0].start()
-    #[fillFile(ifile, channel, args, vbf_pred, None) for ifile in file_names]
+    # processes = [Process(target=fillFile, args=(ifile, channel, args, vbf_pred, None)) for ifile in file_names]
+    # for process in processes:
+    #   process.start()
+    [fillFile(ifile, channel, args, vbf_pred, None) for ifile in file_names]
 
     #print 'Finished processing.'
 
