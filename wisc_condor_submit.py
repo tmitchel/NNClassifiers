@@ -2,89 +2,139 @@ import os
 import sys
 import pwd
 
+class cd:
+    """Context manager for changing the current working directory"""
+    def __init__(self, newPath):
+        self.newPath = os.path.expanduser(newPath)
+
+    def __enter__(self):
+        self.savedPath = os.getcwd()
+        os.chdir(self.newPath)
+
+    def __exit__(self, etype, value, traceback):
+        os.chdir(self.savedPath)
+
+
+def retryLogic(command):
+    return '''\nn=0
+until [ $n -ge 5 ]
+do
+\techo "attempting copy for the ${{n}} time"
+\t{} && break
+\tn=$[$n+1]
+done
+'''.format(command)
+
 
 def main(args):
-    '''
-    Submit a job using farmoutAnalysisJobs --fwklite
-    '''
-    print "Begin NN classifying with Condor"
+    print "Begin NN Classifying..."
     jobName = args.jobName
     sampledir = args.sampledir
-    sample_name = os.path.basename(sampledir)
-    if sample_name == '':
-        print "SAMPLE_NAME not defined, check for trailing '/' on sampledir path"
+    print 'Processing samples from {} in job {}'.format(sampledir, jobName)
+
+    head_dir = '/hdfs/store/user/{}/transfer_holder/{}'.format(pwd.getpwuid(os.getuid())[0], jobName)
+
+    if os.path.exists(head_dir):
+        print 'Submission directory exists for {}.'.format(jobName)
         return
-    else:
-        sample_dir = '/nfs_scratch/%s/%s' % (
-            pwd.getpwuid(os.getuid())[0], jobName)
 
-    # create submit dir
-    submit_dir = '%s/submit' % (sample_dir)
-    if os.path.exists(submit_dir):
-        print('Submission directory exists for %s.' %
-              (jobName))
+    transfer_holder = '/hdfs/store/user/tmitchel/transfer_holder'
+    if not os.path.exists(transfer_holder):
+      os.mkdir(transfer_holder)
 
-    # create dag dir
-    dag_dir = '%s/dags/dag' % (sample_dir)
-    os.system('mkdir -p %s' % (os.path.dirname(dag_dir)))
-    os.system('mkdir -p %s' % (dag_dir+'inputs'))
+    exe_dir = '{}/executables'.format(head_dir)
+    os.system('mkdir -p {}'.format(exe_dir))
+    os.system('mkdir -p {}/logs'.format(head_dir))
 
     os.system('cp condor_classify.py ${CMSSW_BASE}/bin/${SCRAM_ARCH}')
-    os.system('cp {} {}'.format(args.model_vbf, sample_dir))
-    os.system('cp {} {}'.format(args.input_vbf, sample_dir))
+    os.system('cp {} {}'.format(args.model_vbf, transfer_holder))
+    os.system('cp {} {}'.format(args.input_vbf, transfer_holder))
 
-    # output dir
-    output_dir = 'gsiftp://cms-lvs-gridftp.hep.wisc.edu:2811//hdfs/store/user/%s/%s/'\
-        % (pwd.getpwuid(os.getuid())[0], jobName)
+    model_vbf = args.model_vbf.replace('models/', '')
+    input_vbf = args.input_vbf.replace('datasets/', '')
 
-    # create file list
-    filelist = ['%s/%s' % (sampledir, x) for x in os.listdir(sampledir)]
-    filesperjob = 1
-    input_name = '%s/inputs.txt' % (dag_dir+'inputs')
-    with open(input_name, 'w') as file:
-        for f in filelist:
-            file.write('%s\n' % f.replace('/hdfs', '', 1))
+    if args.location == 'wisc':
+      extension = '/cms-lvs-gridftp.hep.wisc.edu/'
+    elif args.location == 'lpc':
+      extension = '/cmseos-gridftp.fnal.gov/'
 
-    just_model = args.model_vbf.replace('models/', '')
-    just_dataset = args.input_vbf.replace('datasets/', '')
+    fileList = [ifile for ifile in filter(None, os.popen(
+        'ls {}'.format(sampledir)).read().split('\n')) if '.root' in ifile]
 
-    # create bash script
-    bash_name = '%s/submit.sh' % (dag_dir+'inputs')
-    bashScript = "#!/bin/bash\n value=$(<$INPUT)\n echo \"$value\"\n"
+    config_name = '{}/config.jdl'.format(head_dir)
+    condorConfig = '''universe = vanilla
+Executable = {}/executables/NN_overseer.sh
+Should_Transfer_Files = YES
+WhenToTransferOutput = ON_EXIT
+Output = {}/logs/{}_$(Cluster)_$(Process).stdout
+Error = {}/logs/{}_$(Cluster)_$(Process).stderr
+Arguments=$(process)
+Queue {}
+    '''.format(head_dir, head_dir, jobName, head_dir, jobName, len(fileList))
+    with open(config_name, 'w') as file:
+        file.write(condorConfig)
 
-    bashScript += '\n echo `pwd`\n echo `ls */`\n'
-    command = 'cp {}/{} .\n'.format(sample_dir, just_model)
-    command += 'python ${{CMSSW_BASE}}/bin/${{SCRAM_ARCH}}/condor_classify.py -t {} -o \'$OUTPUT\' -f $value '.format(args.channel)
-    if args.model_vbf != None and args.input_vbf != None:
-        command += '--model-vbf {} --input-vbf {}'.format(just_model, just_dataset)
-    if args.model_boost != None and args.input_boost != None:
-        command += '--model-boost {} --input-boost {}'.format(args.model_boost, args.input_boost)
-    bashScript += command
-    bashScript += '\necho $OUTPUT \'$OUTPUT\''
-    bashScript += '\n echo `pwd`\n echo `ls */`\n'
-    bashScript += '\n'
-    with open(bash_name, 'w') as file:
-        file.write(bashScript)
-    os.system('chmod +x %s' % bash_name)
+    print 'Condor config has been written: {}'.format(config_name)
 
-    # create farmout command
-    farmoutString = 'farmoutAnalysisJobs --infer-cmssw-path --fwklite --input-file-list=%s' % (
-        input_name)
-    farmoutString += ' --submit-dir=%s --output-dag-file=%s --output-dir=%s' % (
-        submit_dir, dag_dir, output_dir)
-    farmoutString += ' --input-files-per-job=%i %s %s ' % (
-        filesperjob, jobName, bash_name)
-    farmoutString += '--use-hdfs'
-    farmoutString += ' --extra-inputs={}/{},{}/{}'.format(sample_dir, just_model, sample_dir, just_dataset)
-    farmoutString += ' --vsize-limit=10000'
+    NN_overseer_name = '{}/NN_overseer.sh'.format(exe_dir)
+    overseerScript = '''#!/bin/bash
+let "sample=${{1}}+1"
+echo $sample
+cp -r {} .
+cd executables
+echo `ls`
+bash {}_${{sample}}.sh
+    '''.format(exe_dir, jobName)
+    with open(NN_overseer_name, 'w') as file:
+        file.write(overseerScript)
+
+    print 'Condor NN_overseer has been written: {}'.format(NN_overseer_name)
+
+    bashScriptSetup = '''#!/bin/bash
+source /cvmfs/cms.cern.ch/cmsset_default.sh
+export SCRAM_ARCH=slc7_amd64_gcc700
+eval `scramv1 project CMSSW CMSSW_10_4_0`
+cd CMSSW_10_4_0/src
+eval `scramv1 runtime -sh`
+cp {}/{} .
+cp {}/{} .
+echo `ls`'''.format(transfer_holder, args.model_vbf, transfer_holder, args.input_vbf)
+
+    i = 1
+    for ifile in fileList:
+        input_file =  ifile
+        output_file = input_file.replace('.root', '_NNed.root')
+        copycommand = 'cp {} .'.format(input_file)
+
+        # create the bash config script
+        bashScript = bashScriptSetup + retryLogic(copycommand)
+        bash_name = '{}/{}_{}.sh'.format(exe_dir, jobName, i)
+
+        command = 'python ${{CMSSW_BASE}}/bin/${{SCRAM_ARCH}}/condor_classify.py -t {} -o {} -f {} '.format(args.channel, output_file, input_file)
+        if args.model_vbf != None and args.input_vbf != None:
+            command += '--model-vbf {} --input-vbf {}'.format(
+                model_vbf, input_vbf)
+        if args.model_boost != None and args.input_boost != None:
+            command += '--model-boost {} --input-boost {}'.format(
+                args.model_boost, args.input_boost)
+
+        bashScript += command
+        bashScript += '\n'
+
+        with open(bash_name, 'w') as file:
+            file.write(bashScript)
+        os.system('chmod +x {}'.format(bash_name))
+        i += 1
+
+    print 'All executables have been written.'
 
     if not args.dryrun:
-        print('Submitting %s' % args.jobName)
-        os.system(farmoutString)
-    else:
-        print farmoutString
+        print 'Now submitting to condor...'
+        with cd(head_dir):
+          os.system('condor_submit {}'.format(config_name))
 
     return
+
 
 if __name__ == '__main__':
     import argparse
@@ -98,5 +148,6 @@ if __name__ == '__main__':
     parser.add_argument('--input-boost', action='store', dest='input_boost', default=None, help='name of input dataset')
     parser.add_argument('-jn', '--jobName', nargs='?', type=str, const='', help='Job Name for condor submission')
     parser.add_argument('-sd', '--sampledir', nargs='?', type=str, const='', help='The Sample Input directory')
+    parser.add_argument('-l', '--location', nargs='?', type=str, const='', help='Which Condor')
     args = parser.parse_args()
     main(args)
