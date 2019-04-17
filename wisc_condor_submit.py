@@ -2,6 +2,18 @@ import os
 import sys
 import pwd
 
+class cd:
+    """Context manager for changing the current working directory"""
+    def __init__(self, newPath):
+        self.newPath = os.path.expanduser(newPath)
+
+    def __enter__(self):
+        self.savedPath = os.getcwd()
+        os.chdir(self.newPath)
+
+    def __exit__(self, etype, value, traceback):
+        os.chdir(self.savedPath)
+
 
 def retryLogic(command):
     return '''\nn=0
@@ -20,18 +32,23 @@ def main(args):
     sampledir = args.sampledir
     print 'Processing samples from {} in job {}'.format(sampledir, jobName)
 
-    head_dir = '/nfs_scratch/{}/{}'.format(pwd.getpwuid(os.getuid())[0], jobName)
+    head_dir = '/hdfs/store/user/{}/transfer_holder/{}'.format(pwd.getpwuid(os.getuid())[0], jobName)
 
     if os.path.exists(head_dir):
         print 'Submission directory exists for {}.'.format(jobName)
         return
 
+    transfer_holder = '/hdfs/store/user/tmitchel/transfer_holder'
+    if not os.path.exists(transfer_holder):
+      os.mkdir(transfer_holder)
+
     exe_dir = '{}/executables'.format(head_dir)
     os.system('mkdir -p {}'.format(exe_dir))
+    os.system('mkdir -p {}/logs'.format(head_dir))
 
     os.system('cp condor_classify.py ${CMSSW_BASE}/bin/${SCRAM_ARCH}')
-    os.system('cp {} {}'.format(args.model_vbf, head_dir))
-    os.system('cp {} {}'.format(args.input_vbf, head_dir))
+    os.system('cp {} {}'.format(args.model_vbf, transfer_holder))
+    os.system('cp {} {}'.format(args.input_vbf, transfer_holder))
 
     model_vbf = args.model_vbf.replace('models/', '')
     input_vbf = args.input_vbf.replace('datasets/', '')
@@ -42,19 +59,18 @@ def main(args):
       extension = '/cmseos-gridftp.fnal.gov/'
 
     fileList = [ifile for ifile in filter(None, os.popen(
-        'gfal-ls gsiftp:/{}/{}'.format(extension, sampledir)).read().split('\n')) if '.root' in ifile]
+        'ls {}'.format(sampledir)).read().split('\n')) if '.root' in ifile]
 
     config_name = '{}/config.jdl'.format(head_dir)
     condorConfig = '''universe = vanilla
 Executable = {}/executables/NN_overseer.sh
 Should_Transfer_Files = YES
 WhenToTransferOutput = ON_EXIT
-Output = logs/{}_$(Cluster)_$(Process).stdout
-Error = logs/{}_$(Cluster)_$(Process).stderr
-x509userproxy = $ENV(X509_USER_PROXY)
+Output = {}/logs/{}_$(Cluster)_$(Process).stdout
+Error = {}/logs/{}_$(Cluster)_$(Process).stderr
 Arguments=$(process)
 Queue {}
-    '''.format(head_dir, jobName, jobName, len(fileList))
+    '''.format(head_dir, head_dir, jobName, head_dir, jobName, len(fileList))
     with open(config_name, 'w') as file:
         file.write(condorConfig)
 
@@ -82,7 +98,7 @@ cd CMSSW_10_4_0/src
 eval `scramv1 runtime -sh`
 cp {}/{} .
 cp {}/{} .
-echo `ls`'''.format(head_dir, args.model_vbf, head_dir, args.input_vbf)
+echo `ls`'''.format(transfer_holder, args.model_vbf, transfer_holder, args.input_vbf)
 
     i = 1
     for ifile in fileList:
@@ -114,7 +130,8 @@ echo `ls`'''.format(head_dir, args.model_vbf, head_dir, args.input_vbf)
 
     if not args.dryrun:
         print 'Now submitting to condor...'
-        os.system('condor_submit {}'.format(config_name))
+        with cd(head_dir):
+          os.system('condor_submit {}'.format(config_name))
 
     return
 
@@ -131,5 +148,6 @@ if __name__ == '__main__':
     parser.add_argument('--input-boost', action='store', dest='input_boost', default=None, help='name of input dataset')
     parser.add_argument('-jn', '--jobName', nargs='?', type=str, const='', help='Job Name for condor submission')
     parser.add_argument('-sd', '--sampledir', nargs='?', type=str, const='', help='The Sample Input directory')
+    parser.add_argument('-l', '--location', nargs='?', type=str, const='', help='Which Condor')
     args = parser.parse_args()
     main(args)

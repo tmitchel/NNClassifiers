@@ -144,7 +144,7 @@ def main(args):
             if not '_tree' in ikey:
                 continue
             # TEMPORARY
-            if 'tau_tree_jetVeto30_JetTotal' in ikey or 'vbfMass_JetTotal' in ikey or 'tree_Up' in ikey or 'tree_Down' in ikey:
+            if 'tau_tree_jetVeto30_JetTotal' in ikey or 'JetTotal' in ikey or 'tree_Up' in ikey or 'tree_Down' in ikey:
                 continue
 
             proc_file, syst = loadFile(ifile, open_file, ikey, args.category)

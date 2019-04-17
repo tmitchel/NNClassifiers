@@ -1,11 +1,10 @@
-from keras.models import load_model
 import pandas as pd
 from ROOT import TFile
 from glob import glob
 from array import array
 from os import environ, path, mkdir, system
 environ['KERAS_BACKEND'] = 'tensorflow'
-
+from keras.models import load_model
 
 class Predictor:
     def __init__(self, data_name, model_name, keep):
@@ -24,6 +23,7 @@ class Predictor:
         to_classify = self.selected[self.keep] # remove branches not for classifying
         guesses = self.model.predict(to_classify.values, verbose=False)
         self.selected['guess'] = guesses
+        print guesses.mean()
         self.selected.set_index('idx', inplace=True)
 
     def getGuess(self, index):
@@ -52,6 +52,9 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
     for ikey in keylist:
         if not '_tree' in ikey.GetName():
             continue
+
+        if 'JetTotal' in ikey.GetName():
+          continue
 
         itree = root_file.Get(ikey.GetName())
         syst_label = ikey.GetName().replace('mutau_', '')
