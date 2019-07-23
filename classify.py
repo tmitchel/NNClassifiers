@@ -20,8 +20,7 @@ class Predictor:
             (self.current_data['sample_names'] == fname) & (self.current_data['lepton'] == channel)
         ].copy()
 
-        to_classify = self.selected[self.keep] # remove branches not for classifying
-        guesses = self.model.predict(to_classify.values, verbose=False)
+        guesses = self.model.predict(self.selected[self.keep].values, verbose=False)
         self.selected['guess'] = guesses
         print guesses.mean()
         self.selected.set_index('idx', inplace=True)
@@ -34,7 +33,7 @@ class Predictor:
         return guess
 
 
-def fillFile(ifile, channel, args, vbf_pred, boost_pred):
+def fillFile(ifile, channel, args, vbf_pred):
     fname = ifile.split('/')[-1].replace('.root', '').replace('file:', '')
     print 'Starting process for file: {}'.format(fname)
 
@@ -61,18 +60,13 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
         syst_label = syst_label.replace('etau_', '')
 
         vbf_pred.make_prediction(fname, channel, syst_label)
-        # boost_pred.make_prediction(fname, channel, syst_label)
 
         fout.cd()
         ntree = itree.CloneTree(-1, 'fast')
 
         fout.cd()
         branch_var = array('f', [0.])
-        branch_var_vbf = array('f', [0.])
-        branch_var_boost = array('f', [0.])
         disc_branch = ntree.Branch('NN_disc', branch_var, 'NN_disc/F')
-        disc_branch_vbf = ntree.Branch('NN_disc_vbf', branch_var_vbf, 'NN_disc_vbf/F')
-        disc_branch_boost = ntree.Branch('NN_disc_boost', branch_var_boost, 'NN_disc_boost/F')
         nevts = ntree.GetEntries()
 
         for evt_index in range(nevts):
@@ -81,13 +75,9 @@ def fillFile(ifile, channel, args, vbf_pred, boost_pred):
                 print 'Process: {} has completed: {} events out of {}'.format(fname, evt_index, nevts)
             fout.cd()
             branch_var[0] = vbf_pred.getGuess(evt_index)
-            branch_var_vbf[0] = vbf_pred.getGuess(evt_index)
-            # branch_var_boost[0] = boost_pred.getGuess(evt_index)
 
             fout.cd()
             disc_branch.Fill()
-            disc_branch_vbf.Fill()
-            disc_branch_boost.Fill()
 
         fout.cd()
         print 'writing tree {}'.format(ntree.GetName())
@@ -127,12 +117,7 @@ def main(args):
     model = load_model(args.model_vbf)
     vbf_pred = Predictor(dataset, model, keep_vbf)
 
-    # keep_boost = [
-    #          'higgs_pT', 't1_pt', 'lt_dphi', 'lep_pt', 'hj_dphi', 'MT_lepMET', 'MT_HiggsMET', 'met'
-    # ]
-    # boost_pred = Predictor(args.input_boost, args.model_boost, keep_boost)
-
-    [fillFile(ifile, channel, args, vbf_pred, None) for ifile in file_names]
+    [fillFile(ifile, channel, args, vbf_pred) for ifile in file_names]
 
     # print 'Finished processing.'
 
@@ -144,12 +129,8 @@ if __name__ == "__main__":
                         dest='treename', default='etau_tree', help='name of input tree')
     parser.add_argument('--model-vbf', action='store',
                         dest='model_vbf', default=None, help='name of model to use')
-    parser.add_argument('--model-boost', action='store',
-                        dest='model_boost', default=None, help='name of model to use')
     parser.add_argument('--input-vbf', action='store',
                         dest='input_vbf', default=None, help='name of input dataset')
-    parser.add_argument('--input-boost', action='store',
-                        dest='input_boost', default=None, help='name of input dataset')
     parser.add_argument('--dir', '-d', action='store', dest='input_dir',
                         default=None, help='name of ROOT input directory')
     parser.add_argument('--output-dir', '-o', action='store', dest='output_dir',

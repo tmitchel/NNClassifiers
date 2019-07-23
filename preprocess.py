@@ -10,11 +10,7 @@ warnings.filterwarnings(
     'ignore', category=pd.io.pytables.PerformanceWarning)
 
 # Variables used for selection. These shouldn't be normalized
-selection_vars = [
-    'njets', 'OS',
-    'is_signal', 'cat_vbf', 'nbjets',
-    'mt', 't1_dmf', 't1_dmf_new', 't1_decayMode'
-]
+selection_vars = ['njets', 'OS', 'is_signal']
 
 # Variables that could be used as NN input. These should be normalized
 scaled_vars = {
@@ -24,9 +20,10 @@ scaled_vars = {
     ],
     'boosted': [
         'evtwt', 'higgs_pT', 't1_pt', 'lt_dphi', 'lep_pt',
-        'hj_dphi', 'MT_lepMET', 'MT_HiggsMET', 'met'
+        'hj_dphi', 'MT_lepMET', 'MT_HiggsMET', 'met', 'mjj'
     ]
 }
+
 
 def loadFile(ifile, open_file, itree, category):
     if 'mutau' in ifile:
@@ -64,15 +61,8 @@ def loadFile(ifile, open_file, itree, category):
     else:
         raise Exception('Not a category: {}'.format(category))
 
-    # if syst != 'tree':
-    #   slim_df = slim_df[(slim_df['is_signal'] > 0)]
-
-    # if 'ggh' in ifile.lower() or 'ggh' in ifile.lower() or 'wh_inc' in ifile or 'zh_inc' in ifile:
-    #   slim_df = slim_df[(slim_df['is_signal'] > 0)]
-
     slim_df = slim_df.dropna(axis=0, how='any')  # drop events with a NaN
-    slim_df = slim_df.drop_duplicates()
-    slim_df = slim_df[(slim_df['Q2V1'] < 1e10) & (slim_df['Q2V1'] > -1e10)]
+    slim_df = slim_df.drop_duplicates()  # drop duplicate events
 
     # combine lepton pT's
     if category == 'boosted':
@@ -137,8 +127,6 @@ def main(args):
     }
 
     for ifile in input_files:
-        if 'mc_ZTT' in ifile:
-          continue
         open_file = uproot.open(ifile)
         for ikey in open_file.iterkeys():
             if not '_tree' in ikey:
@@ -168,7 +156,7 @@ def main(args):
 
     # normalize the potential training variables
     scaler = StandardScaler()
-    scaler.fit(all_data['tree']['unscaled'].values) # only fit the nominal data
+    scaler.fit(all_data['tree']['unscaled'].values)  # only fit the nominal data
     scaler_info = pd.DataFrame.from_dict({
         'mean': scaler.mean_,
         'scale': scaler.scale_,
@@ -176,10 +164,11 @@ def main(args):
         'nsamples': scaler.n_samples_seen_
     })
     scaler_info.set_index(all_data['tree']['unscaled'].columns.values, inplace=True)
-    store['scaler'] = scaler_info # save scaling info
+    store['scaler'] = scaler_info  # save scaling info
 
     formatted_data = {}
     for syst in all_data.keys():
+        # do the variable transform
         formatted_data[syst] = pd.DataFrame(
             scaler.transform(all_data[syst]['unscaled'].values),
             columns=all_data[syst]['unscaled'].columns.values, dtype='float64')

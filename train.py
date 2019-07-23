@@ -1,6 +1,7 @@
 from sklearn.model_selection import train_test_split
-from os import environ
 from time import time
+from os import environ
+from visualize import discPlot
 environ['KERAS_BACKEND'] = 'tensorflow'
 from keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from keras.layers import Dense, Dropout
@@ -9,7 +10,6 @@ from keras import optimizers
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from visualize import *
 
 def main(args):
     data = pd.HDFStore(args.input)['tree']
@@ -81,6 +81,8 @@ def main(args):
     combine = pd.concat([selected_et, selected_mt])
     sig_df = combine[(combine['sample_names'] == args.signal)]
     bkg_df = combine[(combine['sample_names'] == args.background)]
+
+    ## reweight to have equal events per class
     scaleto = max(len(sig_df), len(bkg_df))
     sig_df.loc[:, 'evtwt'] = sig_df['evtwt'].apply(lambda x: x*scaleto/len(sig_df))
     bkg_df.loc[:, 'evtwt'] = bkg_df['evtwt'].apply(lambda x: x*scaleto/len(bkg_df))
@@ -89,13 +91,13 @@ def main(args):
     ## remove all columns except those needed for training
     training_dataframe = selected_events[training_variables + ['isSignal', 'evtwt']]
     
-    training_data, testing_data, training_labels, testing_labels, training_weights, testing_weights  = train_test_split(
+    training_data, testing_data, training_labels, testing_labels, training_weights, _  = train_test_split(
         training_dataframe[training_variables].values, training_dataframe['isSignal'].values, training_dataframe['evtwt'].values,
         test_size=0.05, random_state=7
     )
 
     ## train that there model, my dude
-    history = model.fit(training_data, training_labels, shuffle=True,
+    _ = model.fit(training_data, training_labels, shuffle=True,
                         epochs=10000, batch_size=1024, verbose=True,
                         callbacks=callbacks, validation_split=0.25, sample_weight=training_weights
                         )
