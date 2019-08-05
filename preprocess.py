@@ -14,7 +14,7 @@ warnings.filterwarnings(
     'ignore', category=pd.io.pytables.PerformanceWarning)
 
 # Variables used for selection. These shouldn't be normalized
-selection_vars = ['njets', 'OS', 'is_signal']
+selection_vars = ['njets', 'is_signal']
 
 # Variables that could be used as NN input. These should be normalized
 scaled_vars = [
@@ -54,7 +54,7 @@ def build_filelist(el_input_dir, mu_input_dir):
 def get_columns(fname):
     columns = scaled_vars + selection_vars
     todrop = ['evtwt', 'idx']
-    if 'VBF125_vbf_ac_' in fname and 'JHU' in fname:
+    if 'vbf' in fname:
         columns = columns + ['wt_a1']
         todrop = todrop + ['wt_a1']
     return columns, todrop
@@ -63,7 +63,7 @@ def get_columns(fname):
 def split_dataframe(fname, slim_df, todrop):
     weights = slim_df['evtwt']
     index = slim_df['idx']
-    if 'VBF125_vbf_ac_' in fname and 'JHU' in fname:
+    if 'vbf' in fname:
         weights = weights * slim_df['wt_a1']
     slim_df = slim_df.drop(selection_vars+todrop, axis=1)
     slim_df = slim_df.astype('float64')
@@ -74,6 +74,10 @@ def get_labels(nevents, name):
     # get training label
     isSignal = np.zeros(nevents)
     if 'vbf125' in name or 'ggh125' in name or 'wh125' in name or 'zh125' in name:
+        isSignal = np.ones(nevents)
+
+    # temp
+    if 'vbf' in name:
         isSignal = np.ones(nevents)
 
     # get scaling label
