@@ -1,141 +1,115 @@
+from os import environ, path, mkdir, listdir
+environ['KERAS_BACKEND'] = 'tensorflow'
+import sys
+import ROOT
+import uproot
 import pandas as pd
-from ROOT import TFile
 from glob import glob
 from array import array
-from os import environ, path, mkdir, system
-environ['KERAS_BACKEND'] = 'tensorflow'
 from keras.models import load_model
 
-class Predictor:
-    def __init__(self, data_name, model_name, keep):
-        self.keep = keep
-        self.selected = pd.DataFrame()
-        self.data = data_name
-        self.model = model_name
-
-    def make_prediction(self, fname, channel, syst='tree'):
-        self.current_data = self.data[syst] # read correct tree
-        self.selected = self.selected.iloc[0:0] # clear selected
-        self.selected = self.current_data[
-            (self.current_data['sample_names'] == fname) & (self.current_data['lepton'] == channel)
-        ].copy()
-
-        guesses = self.model.predict(self.selected[self.keep].values, verbose=False)
-        self.selected['guess'] = guesses
-        print guesses.mean()
-        self.selected.set_index('idx', inplace=True)
-
-    def getGuess(self, index):
-        try:
-            guess = self.selected.loc[index, 'guess']
-        except:
-            guess = -999
-        return guess
+def getGuess(df, index):
+    try:
+        prob_sig = df.loc[index, 'prob_sig']
+    except:
+        prob_sig = -999
+    return prob_sig
 
 
-def fillFile(ifile, channel, args, vbf_pred):
-    fname = ifile.split('/')[-1].replace('.root', '').replace('file:', '')
-    print 'Starting process for file: {}'.format(fname)
+def build_filelist(input_dir):
 
-    root_file = TFile(ifile, 'READ')
-    oname = ifile.split('/')[-1].split('.root')[0]
-    fout = TFile(args.output_dir + '/' + oname + '.root', 'recreate')  # make new file for output
-    keylist = root_file.GetListOfKeys().Clone()
+    filelist = {}
+    for fname in glob('{}/*.root'.format(input_dir)):
+        ifile = uproot.open(fname)
+        for ikey in ifile.keys():
+            if not '_tree' in ikey:
+                continue
 
-    fout.cd()
-    nevents = root_file.Get('nevents').Clone()
-    nevents.Write()
+            keyname = ikey.replace(';1', '')
+            filelist[keyname] = fname
 
-    # now let's try and get this into the root file
-    print 'Reading input file {}'.format(ifile)
-    for ikey in keylist:
-        if not '_tree' in ikey.GetName():
-            continue
-
-        if 'JetTotal' in ikey.GetName():
-          continue
-
-        itree = root_file.Get(ikey.GetName())
-        syst_label = ikey.GetName().replace('mutau_', '')
-        syst_label = syst_label.replace('etau_', '')
-
-        vbf_pred.make_prediction(fname, channel, syst_label)
-
-        fout.cd()
-        ntree = itree.CloneTree(-1, 'fast')
-
-        fout.cd()
-        branch_var = array('f', [0.])
-        disc_branch = ntree.Branch('NN_disc', branch_var, 'NN_disc/F')
-        nevts = ntree.GetEntries()
-
-        for evt_index in range(nevts):
-            ntree.GetEntry(evt_index)
-            if evt_index % 200000 == 0 and evt_index > 0:
-                print 'Process: {} has completed: {} events out of {}'.format(fname, evt_index, nevts)
-            fout.cd()
-            branch_var[0] = vbf_pred.getGuess(evt_index)
-
-            fout.cd()
-            disc_branch.Fill()
-
-        fout.cd()
-        print 'writing tree {}'.format(ntree.GetName())
-        ntree.Write()
-
-    root_file.Close()
-    fout.Close()
-    print '{} Completed.'.format(fname)
-
+    return filelist
 
 def main(args):
-    if args.treename == 'mutau_tree':
-        channel = 'mt'
-    elif args.treename == 'etau_tree':
-        channel = 'et'
+    if 'mutau' in args.input_dir:
+        tree_prefix = 'mutau_tree'
+    elif 'etau' in args.input_dir:
+        tree_prefix = 'etau_tree'
     else:
-        raise Exception('Hey. Bad channel. No. Try again.')
+        raise Exception(
+            'Input files must have MUTAU or ETAU in the provided path. You gave {}, ya goober.'.format(args.input_dir))
+
+    model = load_model('models/{}.hdf5'.format(args.model))
+    all_data = pd.HDFStore(args.input_name)
 
     if not path.isdir(args.output_dir):
         mkdir(args.output_dir)
 
-    file_names = []
-    if args.input_dir != None and args.single_file == None:
-        file_names = [ifile for ifile in glob('{}/*.root'.format(args.input_dir))]
-    elif args.input_dir == None and args.single_file != None:
-        file_names = [args.single_file]
-    else:
-        raise Exception(
-            'Can\'t use single file and full directory options together')
+    filelist = build_filelist(args.input_dir)
+    for ifile, dirs in filelist.iteritems():
+        mkdir(args.output_dir)
+        ## now let's try and get this into the root file
+        root_file = ROOT.TFile(ifile, 'READ')
 
-    keep_vbf = [
-        'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi',
-        'Phi1', 'costheta1', 'costheta2', 'costhetastar'
-    ]
+        # create output file
+        fname = ifile.replace('.root', '')
+        fout = ROOT.TFile('{}/{}.root'.format(args.output_dir, fname), 'recreate')  ## make new file for output
+        fout.cd()
+        nevents = root_file.Get('nevents').Clone()
+        nevents.Write()
+        
+        # loop through trees
+        for idir in dirs:
+            if not 'tree' in idir:
+                continue
+            print 'Processing file: {}'.format(fname)
 
-    dataset = pd.HDFStore(args.input_vbf)
-    model = load_model(args.model_vbf)
-    vbf_pred = Predictor(dataset, model, keep_vbf)
+            syst = idir.replace('etau_tree_', '')
+            syst = syst.replace('mutau_tree_', '')
+            data = all_data[syst] # load the correct tree
 
-    [fillFile(ifile, channel, args, vbf_pred) for ifile in file_names]
+            ## get dataframe for this sample
+            sample = data[(data['sample_names'] == fname)]
 
-    # print 'Finished processing.'
+            ## drop all variables not going into the network
+            to_classify = sample[[
+                'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2',
+                'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar'
+            ]]
 
+            ## do the classification
+            guesses = model.predict(to_classify.values, verbose=False)
+            out = sample.copy()
+            out['prob_sig'] = guesses[:, 0]
+            out.set_index('idx', inplace=True)
+
+
+            itree = root_file.Get(idir)
+            ntree = itree.CloneTree(-1, 'fast')
+
+            NN_sig = array('f', [0.])
+            disc_branch_sig = ntree.Branch('NN_disc', NN_sig, 'NN_disc/F')
+            evt_index = 0
+            for _ in itree:
+                if evt_index % 100000 == 0:
+                    print 'Processing: {}% completed'.format((evt_index*100)/ntree.GetEntries())
+
+                NN_sig[0]= getGuess(out, evt_index)
+
+                evt_index += 1
+                fout.cd()
+                disc_branch_sig.Fill()
+            fout.cd()
+            ntree.Write()
+        root_file.Close()
+        fout.Close()
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument('--treename', '-t', action='store',
-                        dest='treename', default='etau_tree', help='name of input tree')
-    parser.add_argument('--model-vbf', action='store',
-                        dest='model_vbf', default=None, help='name of model to use')
-    parser.add_argument('--input-vbf', action='store',
-                        dest='input_vbf', default=None, help='name of input dataset')
-    parser.add_argument('--dir', '-d', action='store', dest='input_dir',
-                        default=None, help='name of ROOT input directory')
-    parser.add_argument('--output-dir', '-o', action='store', dest='output_dir',
-                        default='output_files/', help='name of directory for output')
-    parser.add_argument('--file', '-f', action='store', dest='single_file',
-                        default=None, help='name of directory for output')
+    parser.add_argument('--model', '-m', action='store', dest='model', default='testModel', help='name of model to use')
+    parser.add_argument('--input', '-i', action='store', dest='input_name', default='test', help='name of input dataset')
+    parser.add_argument('--dir', '-d', action='store', dest='input_dir', default='input_files/etau_stable_Oct24', help='name of ROOT input directory')
+    parser.add_argument('--out', '-o', action='store', dest='output_dir', default='output_files/example')
 
     main(parser.parse_args())
