@@ -12,19 +12,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main(args):
-    data = pd.HDFStore(args.input)['tree']
+    data = pd.HDFStore(args.input)['nominal']
     ## define training variables
-    if args.category == 'vbf':
-        training_variables = [
-           'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
-            'costheta2', 'costhetastar'
-        ]
-    elif args.category == 'boosted':
-        training_variables = [
-            'higgs_pT', 't1_pt', 'lt_dphi', 'lep_pt', 'hj_dphi', 'MT_lepMET', 'MT_HiggsMET', 'met', 'm_sv'
-        ]
-    else:
-        raise Exception('{} isn\'t an acceptable category')
+    training_variables = [
+        'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
+        'costheta2', 'costhetastar'
+    ]
 
     nvars = len(training_variables)
 
@@ -55,9 +48,7 @@ def main(args):
 
     ## apply VBF category selection
     vbf_processes = training_processes[
-        (training_processes['is_signal'] > 0) &
-        (training_processes['mt'] < 50) &
-        (training_processes['OS'] > 0)
+        (training_processes['is_signal'] > 0)
         ]
 
     print 'No. Signal Events:     {}'.format(len(vbf_processes[vbf_processes['sample_names'] == args.signal]))
@@ -127,6 +118,5 @@ if __name__ == "__main__":
     parser.add_argument('--signal', '-s', action='store', dest='signal', default='VBF125.root', help='name of signal file')
     parser.add_argument('--background', '-b', action='store', dest='background', default='ZTT.root', help='name of background file')
     parser.add_argument('--dont-plot', action='store_true', dest='dont_plot', help='don\'t make training plots')
-    parser.add_argument('--category', '-c', action='store', dest='category', default='vbf', help='category to train')
 
     main(parser.parse_args())
