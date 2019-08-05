@@ -1,8 +1,12 @@
+import os
 import sys
+import math
+import time
 import uproot
 import numpy as np
 import pandas as pd
 from glob import glob
+from pprint import pprint
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 import warnings
@@ -13,88 +17,122 @@ warnings.filterwarnings(
 selection_vars = ['njets', 'OS', 'is_signal']
 
 # Variables that could be used as NN input. These should be normalized
-scaled_vars = {
-    'vbf': [
-        'evtwt', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
-        'costheta2', 'costhetastar', 'mjj', 'higgs_pT', 'm_sv',
-    ],
-    'boosted': [
-        'evtwt', 'higgs_pT', 't1_pt', 'lt_dphi', 'lep_pt',
-        'hj_dphi', 'MT_lepMET', 'MT_HiggsMET', 'met', 'mjj'
+scaled_vars = [
+    'evtwt', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
+    'costheta2', 'costhetastar', 'mjj', 'higgs_pT', 'm_sv',
+]
+
+
+def build_filelist(el_input_dir, mu_input_dir):
+    files = [
+        ifile for ifile in glob('{}/*.root'.format(el_input_dir))
     ]
-}
+    files += [
+        ifile for ifile in glob('{}/*.root'.format(mu_input_dir))
+    ]
+
+    nominal = {'nominal': []}
+    systematics = {}
+    for fname in files:
+        ifile = uproot.open(fname)
+        for ikey in ifile.keys():
+            if not '_tree' in ikey:
+                continue
+
+            if '_tree_' in ikey:  # temporary until I redo trees
+                # if '_SYST_' in ikey:
+                keyname = ikey.replace(';1', '')
+                keyname = keyname.replace('etau_tree_', '')
+                keyname = keyname.replace('mutau_tree_', '')
+                systematics.setdefault(keyname, [])
+                systematics[keyname].append(fname)
+            else:
+                nominal['nominal'].append(fname)
+    return nominal, systematics
 
 
-def loadFile(ifile, open_file, itree, category):
+def get_columns(fname):
+    columns = scaled_vars + selection_vars
+    todrop = ['evtwt', 'idx']
+    if 'VBF125_vbf_ac_' in fname and 'JHU' in fname:
+        columns = columns + ['wt_a1']
+        todrop = todrop + ['wt_a1']
+    return columns, todrop
+
+
+def split_dataframe(fname, slim_df, todrop):
+    weights = slim_df['evtwt']
+    index = slim_df['idx']
+    if 'VBF125_vbf_ac_' in fname and 'JHU' in fname:
+        weights = weights * slim_df['wt_a1']
+    slim_df = slim_df.drop(selection_vars+todrop, axis=1)
+    slim_df = slim_df.astype('float64')
+    return slim_df, weights, index
+
+
+def get_labels(nevents, name):
+    # get training label
+    isSignal = np.zeros(nevents)
+    if 'vbf125' in name or 'ggh125' in name or 'wh125' in name or 'zh125' in name:
+        isSignal = np.ones(nevents)
+
+    # get scaling label
+    isSM = np.ones(nevents)
+    if '_ac_' in name and not 'a1' in name:
+        isSM = np.zeros(nevents)
+    elif 'data' in name:
+        isSM = np.zeros(nevents)
+
+    return isSignal, isSM
+
+
+def loadFile(ifile, open_file, syst):
+    print 'Loading input file...', ifile, 'with syst...', syst
     if 'mutau' in ifile:
         channel = 'mt'
-        syst = itree.replace('mutau_', '')
+        tree_prefix = 'mutau_tree'
     elif 'etau' in ifile:
         channel = 'et'
-        syst = itree.replace('etau_', '')
+        tree_prefix = 'etau_tree'
     else:
         raise Exception(
             'Input files must have MUTAU or ETAU in the provided path. You gave {}, ya goober.'.format(ifile))
 
-    filename = ifile.split('/')[-1]
-    print 'Loading input file...', filename, itree
-
-    todrop = ['evtwt', 'idx']
-    columns = scaled_vars[category] + selection_vars
-    if 'vbf_inc' in ifile:
-        columns = columns + ['wt_a1']
-        todrop = todrop + ['wt_a1']
+    columns, todrop = get_columns(ifile)
 
     # read from TTrees into DataFrame
-    input_df = open_file[itree].pandas.df(columns)
+    if syst == 'nominal':
+        input_df = open_file[tree_prefix].pandas.df(columns)
+    else:
+        input_df = open_file[tree_prefix + "_" + syst].pandas.df(columns)
     input_df['idx'] = np.array([i for i in xrange(0, len(input_df))])
 
-    # preselection
-    if category == 'vbf':
-        slim_df = input_df[
-            (input_df['njets'] > 1) & (input_df['mjj'] > 300)
-        ]
-    elif category == 'boosted':
-        slim_df = input_df[
-            (input_df['njets'] == 1)
-        ]
-    else:
-        raise Exception('Not a category: {}'.format(category))
+    slim_df = input_df[(input_df['njets'] > 1) & (input_df['mjj'] > 300)]  # preselection
 
+    # make sure our DataFrame is actually reasonable
     slim_df = slim_df.dropna(axis=0, how='any')  # drop events with a NaN
-    slim_df = slim_df.drop_duplicates()  # drop duplicate events
-
-    # combine lepton pT's
-    if category == 'boosted':
-        if channel == 'mt':
-            slim_df['lep_pt'] = slim_df['mu_pt'].copy()
-        elif channel == 'et':
-            slim_df['lep_pt'] = slim_df['el_pt'].copy()
-        slim_df = slim_df.drop(['el_pt', 'mu_pt'], axis=1)
+    slim_df = slim_df.drop_duplicates()
+    slim_df['Q2V1'] = slim_df[(slim_df['Q2V1'] > -1e10) & (slim_df['Q2V1'] < 1e10)]
+    slim_df['Q2V2'] = slim_df[(slim_df['Q2V2'] > -1e10) & (slim_df['Q2V2'] < 1e10)]
+    slim_df['Phi'] = slim_df[(slim_df['Phi'] > -2.1 * math.pi) & (slim_df['Phi'] < 2.1 * math.pi)] # gave this a little wiggle room
+    slim_df['Phi1'] = slim_df[(slim_df['Phi1'] > -2.1 * math.pi) & (slim_df['Phi1'] < 2.1 * math.pi)]
+    slim_df['costheta1'] = slim_df[(slim_df['costheta1'] > -1) & (slim_df['costheta1'] < 1)]
+    slim_df['costheta2'] = slim_df[(slim_df['costheta2'] > -1) & (slim_df['costheta2'] < 1)]
+    slim_df['costhetastar'] = slim_df[(slim_df['costhetastar'] > -1) & (slim_df['costhetastar'] < 1)]
 
     # get variables needed for selection (so they aren't normalized)
     selection_df = slim_df[selection_vars]
 
     # get just the weights (they are scaled differently)
-    weights = slim_df['evtwt']
-    index = slim_df['idx']
-    if 'vbf_inc' in ifile:
-        weights = weights * slim_df['wt_a1']
-    slim_df = slim_df.drop(selection_vars+todrop, axis=1)
-    slim_df = slim_df.astype('float64')
+    slim_df, weights, index = split_dataframe(ifile, slim_df, todrop)
 
     # add the event label
-    if 'vbf' in ifile.lower() or 'ggh' in ifile.lower():
-        isSignal = np.ones(len(slim_df))
-    else:
-        isSignal = np.zeros(len(slim_df))
+    isSignal, isSM = get_labels(len(slim_df), ifile.lower())
+    slim_df['isSM'] = isSM
 
-    # scale event weights between 1 - 2
-    weights = MinMaxScaler(
-        feature_range=(1., 2.)
-    ).fit_transform(
-        weights.values.reshape(-1, 1)
-    )
+    # scale event weights between 0 - 1
+    weights = MinMaxScaler(feature_range=(1., 2.)).fit_transform(
+        weights.values.reshape(-1, 1))
 
     return {
         'slim_df': slim_df,
@@ -102,88 +140,114 @@ def loadFile(ifile, open_file, itree, category):
         'isSignal': isSignal,
         'weights': weights,
         'index': index,
-        'somenames': np.full(len(slim_df), filename.split('.root')[0]),
+        'somenames': np.full(len(slim_df), ifile.split('/')[-1]),
         'lepton': np.full(len(slim_df), channel),
     }, syst.replace(';1', '')
 
 
-def main(args):
-    input_files = [
-        ifile for ifile in glob('{}/*.root'.format(args.el_input_dir))
-    ]
-    input_files += [
-        ifile for ifile in glob('{}/*.root'.format(args.mu_input_dir)) if args.mu_input_dir != None
-    ]
-
-    all_data = {}
+def handle_tree(all_data, ifile, syst):
     default_object = {
-        'unscaled': pd.DataFrame(dtype='float64'),
+        'unscaled': pd.DataFrame(),
         'selection': pd.DataFrame(),
         'names': np.array([]),
-        'leptons': np.array([]),
         'isSignal': np.array([]),
         'weights': np.array([]),
         'index': np.array([]),
+        'lepton': np.array([])
     }
 
-    for ifile in input_files:
-        open_file = uproot.open(ifile)
-        for ikey in open_file.iterkeys():
-            if not '_tree' in ikey:
-                continue
-            # TEMPORARY
-            if 'tau_tree_jetVeto30_JetTotal' in ikey or 'JetTotal' in ikey or 'tree_Up' in ikey or 'tree_Down' in ikey:
-                continue
+    open_file = uproot.open(ifile)
+    filename = ifile.replace('.root', '')
 
-            proc_file, syst = loadFile(ifile, open_file, ikey, args.category)
-            all_data.setdefault(syst, default_object.copy())
+    proc_file, syst = loadFile(filename, open_file, syst)
+    all_data.setdefault(syst, default_object.copy())
 
-            # add data to the full set
-            all_data[syst]['unscaled'] = pd.concat([all_data[syst]['unscaled'], proc_file['slim_df']])
-            # add selection variables to full set
-            all_data[syst]['selection'] = pd.concat([all_data[syst]['selection'], proc_file['selection_df']])
-            # insert the name of the current sample
-            all_data[syst]['names'] = np.append(all_data[syst]['names'], proc_file['somenames'])
-            # labels for signal/background
-            all_data[syst]['isSignal'] = np.append(all_data[syst]['isSignal'], proc_file['isSignal'])
-            # weights scaled from 0 - 1
-            all_data[syst]['weights'] = np.append(all_data[syst]['weights'], proc_file['weights'])
-            all_data[syst]['leptons'] = np.append(all_data[syst]['leptons'], proc_file['lepton'])  # lepton channel
-            all_data[syst]['index'] = np.append(all_data[syst]['index'], proc_file['index'])
+    # add data to the full set
+    all_data[syst]['unscaled'] = pd.concat([all_data[syst]['unscaled'], proc_file['slim_df']])
+    # add selection variables to full set
+    all_data[syst]['selection'] = pd.concat([all_data[syst]['selection'], proc_file['selection_df']])
+    # insert the name of the current sample
+    all_data[syst]['names'] = np.append(all_data[syst]['names'], proc_file['somenames'])
+    # insert the name of the channel
+    all_data[syst]['lepton'] = np.append(all_data[syst]['lepton'], proc_file['lepton'])
+    # labels for signal/background
+    all_data[syst]['isSignal'] = np.append(all_data[syst]['isSignal'], proc_file['isSignal'])
+    # weights scaled from 0 - 1
+    all_data[syst]['weights'] = np.append(all_data[syst]['weights'], proc_file['weights'])
+    all_data[syst]['index'] = np.append(all_data[syst]['index'], proc_file['index'])
 
-    # create the store
-    store = pd.HDFStore('datasets/{}.h5'.format(args.output), complevel=9, complib='bzip2')
+    return all_data
 
-    # normalize the potential training variables
+
+def build_scaler(sm_only):
     scaler = StandardScaler()
-    scaler.fit(all_data['tree']['unscaled'].values)  # only fit the nominal data
+    # only fit the nominal backgrounds
+    scaler.fit(sm_only.values)
     scaler_info = pd.DataFrame.from_dict({
         'mean': scaler.mean_,
         'scale': scaler.scale_,
         'variance': scaler.var_,
         'nsamples': scaler.n_samples_seen_
     })
-    scaler_info.set_index(all_data['tree']['unscaled'].columns.values, inplace=True)
-    store['scaler'] = scaler_info  # save scaling info
+    scaler_info.set_index(sm_only.columns.values, inplace=True)
+    return scaler, scaler_info
 
-    formatted_data = {}
-    for syst in all_data.keys():
-        # do the variable transform
-        formatted_data[syst] = pd.DataFrame(
-            scaler.transform(all_data[syst]['unscaled'].values),
-            columns=all_data[syst]['unscaled'].columns.values, dtype='float64')
 
-        # add selection variables
-        for column in all_data[syst]['selection'].columns:
-            formatted_data[syst][column] = all_data[syst]['selection'][column].values
+def format_for_store(all_data, idir, scaler):
+    formatted_data = pd.DataFrame(
+        scaler.transform(all_data[idir]['unscaled'].values),
+        columns=all_data[idir]['unscaled'].columns.values, dtype='float64')
 
-        # add other useful data
-        formatted_data[syst]['sample_names'] = pd.Series(all_data[syst]['names'])
-        formatted_data[syst]['lepton'] = pd.Series(all_data[syst]['leptons'])
-        formatted_data[syst]['isSignal'] = pd.Series(all_data[syst]['isSignal'])
-        formatted_data[syst]['evtwt'] = pd.Series(all_data[syst]['weights'])
-        formatted_data[syst]['idx'] = pd.Series(all_data[syst]['index'])
-        store[syst] = formatted_data[syst]
+    # add selection variables
+    for column in all_data[idir]['selection'].columns:
+        formatted_data[column] = all_data[idir]['selection'][column].values
+
+    # add other useful data
+    formatted_data['sample_names'] = pd.Series(all_data[idir]['names'])
+    formatted_data['lepton'] = pd.Series(all_data[idir]['lepton'])
+    formatted_data['isSignal'] = pd.Series(all_data[idir]['isSignal'])
+    formatted_data['evtwt'] = pd.Series(all_data[idir]['weights'])
+    formatted_data['idx'] = pd.Series(all_data[idir]['index'])
+    return formatted_data
+
+
+def main(args):
+    start = time.time()
+
+    # create the store
+    store = pd.HDFStore('datasets/{}.h5'.format(args.output),
+                        complevel=9, complib='bzip2')
+
+    # build dictionaries of directory/files
+    nominal, systematics = build_filelist(args.el_input_dir, args.mu_input_dir)
+    pprint(nominal)
+    pprint(systematics)
+
+    # handle the nominal case first
+    for idir, files in nominal.iteritems():
+        all_data = {}
+        for ifile in files:
+            all_data = handle_tree(all_data, ifile, idir)
+
+    # build the scaler fit only to nominal SM backgrounds
+    sm_only = all_data['nominal']['unscaled'][all_data['nominal']['unscaled']['isSM'] == 1]
+    scaler, store['scaler'] = build_scaler(sm_only)
+
+    # scale and save the nominal case to the output file
+    store['nominal'] = format_for_store(all_data, 'nominal', scaler)
+
+    # now handle the systematics
+    for idir, files in systematics.iteritems():
+        if 'jetVeto' in idir: # temporary
+            continue
+        all_data.clear()
+        for ifile in files:
+            all_data = handle_tree(all_data, ifile, idir)
+
+        # scale and save to the output file
+        store[idir] = format_for_store(all_data, idir, scaler)
+
+    print 'Complete! Preprocessing completed in {} seconds'.format(time.time() - start)
 
 
 if __name__ == "__main__":
@@ -195,7 +259,5 @@ if __name__ == "__main__":
                         dest='mu_input_dir', default=None, help='path to mutau input files')
     parser.add_argument('--output', '-o', action='store', dest='output',
                         default='store.h5', help='name of output file')
-    parser.add_argument('--category', '-c', action='store', dest='category',
-                        default='vbf', help='name of category for selection')
 
     main(parser.parse_args())
