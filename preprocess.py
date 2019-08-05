@@ -220,8 +220,6 @@ def main(args):
 
     # build dictionaries of directory/files
     nominal, systematics = build_filelist(args.el_input_dir, args.mu_input_dir)
-    pprint(nominal)
-    pprint(systematics)
 
     # handle the nominal case first
     for idir, files in nominal.iteritems():
