@@ -25,10 +25,10 @@ scaled_vars = [
 
 def build_filelist(el_input_dir, mu_input_dir):
     files = [
-        ifile for ifile in glob('{}/*.root'.format(el_input_dir))
+        ifile for ifile in glob('{}/*/merged/*.root'.format(el_input_dir))
     ]
     files += [
-        ifile for ifile in glob('{}/*.root'.format(mu_input_dir))
+        ifile for ifile in glob('{}/*/merged/*.root'.format(mu_input_dir))
     ]
 
     nominal = {'nominal': []}
@@ -39,22 +39,21 @@ def build_filelist(el_input_dir, mu_input_dir):
             if not '_tree' in ikey:
                 continue
 
-            if '_tree_' in ikey:  # temporary until I redo trees
-                # if '_SYST_' in ikey:
-                keyname = ikey.replace(';1', '')
-                keyname = keyname.replace('et_tree_', '')
-                keyname = keyname.replace('mt_tree_', '')
+            if 'SYST_' in fname:
+                keyname = fname.split('SYST_')[-1].split('/')[0]
                 systematics.setdefault(keyname, [])
                 systematics[keyname].append(fname)
             else:
                 nominal['nominal'].append(fname)
+    pprint(nominal)
+    pprint(systematics)
     return nominal, systematics
 
 
 def get_columns(fname):
     columns = scaled_vars + selection_vars
     todrop = ['evtwt', 'idx']
-    if 'vbf' in fname:
+    if 'vbf125_JHU' in fname:
         columns = columns + ['wt_vbf_a1']
         todrop = todrop + ['wt_vbf_a1']
     return columns, todrop
@@ -63,7 +62,7 @@ def get_columns(fname):
 def split_dataframe(fname, slim_df, todrop):
     weights = slim_df['evtwt']
     index = slim_df['idx']
-    if 'vbf' in fname:
+    if 'vbf125_JHU' in fname:
         weights = weights * slim_df['wt_vbf_a1']
     slim_df = slim_df.drop(selection_vars+todrop, axis=1)
     slim_df = slim_df.astype('float64')
@@ -82,7 +81,7 @@ def get_labels(nevents, name):
 
     # get scaling label
     isSM = np.ones(nevents)
-    if '_ac_' in name and not 'a1' in name:
+    if ('_JHU_' in name or 'madgraph' in name) and not 'a1-prod_nom-decay' in name:
         isSM = np.zeros(nevents)
     elif 'data' in name:
         isSM = np.zeros(nevents)
@@ -92,9 +91,9 @@ def get_labels(nevents, name):
 
 def loadFile(ifile, open_file, syst):
     print 'Loading input file...', ifile, 'with syst...', syst
-    if 'mutau' in ifile:
+    if 'mutau' in ifile or 'mtau' in ifile:
         channel = 'mt'
-    elif 'etau' in ifile:
+    elif 'etau' in ifile or 'etau' in ifile:
         channel = 'et'
     else:
         raise Exception(
@@ -106,16 +105,16 @@ def loadFile(ifile, open_file, syst):
     if syst == 'nominal':
         input_df = open_file['{}_tree'.format(channel)].pandas.df(columns)
     else:
-        input_df = open_file['{}_tree_{}'.format(channel, syst)].pandas.df(columns)
-    input_df['idx'] = np.array([i for i in xrange(0, len(input_df))])
+        input_df = open_file['{}_tree'.format(channel)].pandas.df(columns)
+    input_df['idx'] = np.array([i for i in xrange(0, len(input_df.index))])
 
     slim_df = input_df[(input_df['njets'] > 1) & (input_df['mjj'] > 300)]  # preselection
 
     # make sure our DataFrame is actually reasonable
     slim_df = slim_df.dropna(axis=0, how='any')  # drop events with a NaN
     slim_df = slim_df.drop_duplicates()
-    slim_df = slim_df[(slim_df['Q2V1'] > -1e10) & (slim_df['Q2V1'] < 1e10)] / 100.
-    slim_df = slim_df[(slim_df['Q2V2'] > -1e10) & (slim_df['Q2V2'] < 1e10)] / 100.
+    slim_df = slim_df[(slim_df['Q2V1'] > -1e10) & (slim_df['Q2V1'] < 1e10)]
+    slim_df = slim_df[(slim_df['Q2V2'] > -1e10) & (slim_df['Q2V2'] < 1e10)]
     slim_df = slim_df[(slim_df['Phi'] > -2.1 * math.pi) & (slim_df['Phi'] < 2.1 * math.pi)] # gave this a little wiggle room
     slim_df = slim_df[(slim_df['Phi1'] > -2.1 * math.pi) & (slim_df['Phi1'] < 2.1 * math.pi)]
     slim_df = slim_df[(slim_df['costheta1'] > -1) & (slim_df['costheta1'] < 1)]

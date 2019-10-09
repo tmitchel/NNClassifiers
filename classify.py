@@ -6,7 +6,9 @@ import uproot
 import pandas as pd
 from glob import glob
 from array import array
+from pprint import pprint
 from keras.models import load_model
+from collections import defaultdict
 
 def getGuess(df, index):
     try:
@@ -17,24 +19,33 @@ def getGuess(df, index):
 
 
 def build_filelist(input_dir):
+    files = [
+        ifile for ifile in glob('{}/*/merged/*.root'.format(input_dir))
+    ]
 
-    filelist = {}
-    for fname in glob('{}/*.root'.format(input_dir)):
+    data = {}
+    for fname in files:
         ifile = uproot.open(fname)
         for ikey in ifile.keys():
             if not '_tree' in ikey:
                 continue
 
-            keyname = ikey.replace(';1', '')
-            filelist[keyname] = fname
+            if 'SYST_' in fname:
+                keyname = fname.split('SYST_')[-1].split('/')[0]
+                data.setdefault(keyname, [])
+                data[keyname].append(fname)
+            else:
+                data.setdefault('nominal', [])
+                data['nominal'].append(fname)
+    pprint(data)
+    return data
 
-    return filelist
 
 def main(args):
-    if 'mutau' in args.input_dir:
-        tree_prefix = 'mutau_tree'
+    if 'mutau' in args.input_dir or 'mtau' in args.input_dir:
+        tree_prefix = 'mt_tree'
     elif 'etau' in args.input_dir:
-        tree_prefix = 'etau_tree'
+        tree_prefix = 'et_tree'
     else:
         raise Exception(
             'Input files must have MUTAU or ETAU in the provided path. You gave {}, ya goober.'.format(args.input_dir))
@@ -46,30 +57,30 @@ def main(args):
         mkdir(args.output_dir)
 
     filelist = build_filelist(args.input_dir)
-    for ifile, dirs in filelist.iteritems():
-        mkdir(args.output_dir)
-        ## now let's try and get this into the root file
-        root_file = ROOT.TFile(ifile, 'READ')
-
-        # create output file
-        fname = ifile.replace('.root', '')
-        fout = ROOT.TFile('{}/{}.root'.format(args.output_dir, fname), 'recreate')  ## make new file for output
-        fout.cd()
-        nevents = root_file.Get('nevents').Clone()
-        nevents.Write()
+    print 'Files to process...'
+    pprint(dict(filelist))
+    for syst, ifiles in filelist.iteritems():
+        if not path.exists('{}/{}'.format(args.output_dir, syst)):
+          mkdir('{}/{}'.format(args.output_dir, syst))
         
-        # loop through trees
-        for idir in dirs:
-            if not 'tree' in idir:
-                continue
-            print 'Processing file: {}'.format(fname)
+        for ifile in ifiles:
 
-            syst = idir.replace('etau_tree_', '')
-            syst = syst.replace('mutau_tree_', '')
-            data = all_data[syst] # load the correct tree
+            ## now let's try and get this into the root file
+            root_file = ROOT.TFile(ifile, 'READ')
+
+            # create output file
+            fname = ifile.replace('.root', '').split('/')[-1]
+            print 'Processing file: {}'.format(fname)
+            fout = ROOT.TFile('{}/{}/{}.root'.format(args.output_dir, syst, fname), 'recreate')  ## make new file for output
+            fout.cd()
+            nevents = root_file.Get('nevents').Clone()
+            nevents.Write()
+        
+            # load the correct tree
+            data = all_data[syst]
 
             ## get dataframe for this sample
-            sample = data[(data['sample_names'] == fname)]
+            sample = data[(data['sample_names'] == fname) & (data['lepton'] == tree_prefix[:2])]
 
             ## drop all variables not going into the network
             to_classify = sample[[
@@ -80,11 +91,10 @@ def main(args):
             ## do the classification
             guesses = model.predict(to_classify.values, verbose=False)
             out = sample.copy()
-            out['prob_sig'] = guesses[:, 0]
+            out['prob_sig'] = guesses
             out.set_index('idx', inplace=True)
 
-
-            itree = root_file.Get(idir)
+            itree = root_file.Get(tree_prefix)
             ntree = itree.CloneTree(-1, 'fast')
 
             NN_sig = array('f', [0.])
