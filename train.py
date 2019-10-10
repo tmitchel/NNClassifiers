@@ -15,8 +15,8 @@ def main(args):
     data = pd.HDFStore(args.input)['nominal']
     ## define training variables
     training_variables = [
-        'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1',
-        'costheta2', 'costhetastar'
+        'Q2V1', 'Q2V2', 'Phi', 'Phi1', 'costheta1', 'costheta2',
+        'costhetastar', 'mjj', 'higgs_pT', 'm_sv'
     ]
 
     nvars = len(training_variables)

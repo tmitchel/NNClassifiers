@@ -2,6 +2,7 @@ from os import environ, path, mkdir, listdir
 environ['KERAS_BACKEND'] = 'tensorflow'
 import sys
 import ROOT
+import numpy
 import uproot
 import pandas as pd
 from glob import glob
@@ -9,6 +10,7 @@ from array import array
 from pprint import pprint
 from keras.models import load_model
 from collections import defaultdict
+from sklearn.preprocessing import StandardScaler
 
 def getGuess(df, index):
     try:
@@ -64,55 +66,40 @@ def main(args):
           mkdir('{}/{}'.format(args.output_dir, syst))
         
         for ifile in ifiles:
-
-            ## now let's try and get this into the root file
-            root_file = ROOT.TFile(ifile, 'READ')
-
-            # create output file
             fname = ifile.replace('.root', '').split('/')[-1]
             print 'Processing file: {}'.format(fname)
-            fout = ROOT.TFile('{}/{}/{}.root'.format(args.output_dir, syst, fname), 'recreate')  ## make new file for output
-            fout.cd()
-            nevents = root_file.Get('nevents').Clone()
-            nevents.Write()
-        
-            # load the correct tree
-            data = all_data[syst]
 
-            ## get dataframe for this sample
-            sample = data[(data['sample_names'] == fname) & (data['lepton'] == tree_prefix[:2])]
+            open_file = uproot.open(ifile)
+            nevents = open_file['nevents']
+            oldtree = open_file[tree_prefix].arrays(['*'])
+            treedict = {ikey: oldtree[ikey].dtype for ikey in oldtree.keys()}
+            treedict['NN_disc'] = numpy.float64
+
+            # load the correct tree
+            scaler_info = all_data['scaler']
+            scaler_info = scaler_info.drop('isSM', axis=0)
 
             ## drop all variables not going into the network
-            to_classify = sample[[
-                'm_sv', 'mjj', 'higgs_pT', 'Q2V1', 'Q2V2',
-                'Phi', 'Phi1', 'costheta1', 'costheta2', 'costhetastar'
-            ]]
+            to_classify = open_file[tree_prefix].arrays(scaler_info.index.values, outputtype=pd.DataFrame)
+
+            scaler = StandardScaler()
+            scaler.mean_ = scaler_info['mean'].values.reshape(1, -1)
+            scaler.scale_ = scaler_info['scale'].values.reshape(1, -1)
+
+            # scale correctly
+            scaled = pd.DataFrame(
+                scaler.transform(to_classify.values),
+                columns=to_classify.columns.values, dtype='float64')
 
             ## do the classification
-            guesses = model.predict(to_classify.values, verbose=False)
-            out = sample.copy()
-            out['prob_sig'] = guesses
-            out.set_index('idx', inplace=True)
+            guesses = model.predict(scaled.values, verbose=True)
 
-            itree = root_file.Get(tree_prefix)
-            ntree = itree.CloneTree(-1, 'fast')
+            with uproot.recreate('{}/{}/{}.root'.format(args.output_dir, syst, fname)) as f:
+                f['tree'] = uproot.newtree(treedict)
+                oldtree['NN_disc'] = guesses.reshape(len(guesses))
+                f['tree'].extend(oldtree)
 
-            NN_sig = array('f', [0.])
-            disc_branch_sig = ntree.Branch('NN_disc', NN_sig, 'NN_disc/F')
-            evt_index = 0
-            for _ in itree:
-                if evt_index % 100000 == 0:
-                    print 'Processing: {}% completed'.format((evt_index*100)/ntree.GetEntries())
 
-                NN_sig[0]= getGuess(out, evt_index)
-
-                evt_index += 1
-                fout.cd()
-                disc_branch_sig.Fill()
-            fout.cd()
-            ntree.Write()
-        root_file.Close()
-        fout.Close()
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
