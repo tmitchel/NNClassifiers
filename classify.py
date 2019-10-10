@@ -95,9 +95,9 @@ def main(args):
             guesses = model.predict(scaled.values, verbose=True)
 
             with uproot.recreate('{}/{}/{}.root'.format(args.output_dir, syst, fname)) as f:
-                f['tree'] = uproot.newtree(treedict)
+                f[tree_prefix] = uproot.newtree(treedict)
                 oldtree['NN_disc'] = guesses.reshape(len(guesses))
-                f['tree'].extend(oldtree)
+                f[tree_prefix].extend(oldtree)
 
 
 
