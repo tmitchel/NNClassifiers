@@ -27,19 +27,13 @@ def build_filelist(input_dir):
 
     data = {}
     for fname in files:
-        ifile = uproot.open(fname)
-        for ikey in ifile.keys():
-            if not '_tree' in ikey:
-                continue
-
-            if 'SYST_' in fname:
-                keyname = fname.split('SYST_')[-1].split('/')[0]
-                data.setdefault(keyname, [])
-                data[keyname].append(fname)
-            else:
-                data.setdefault('nominal', [])
-                data['nominal'].append(fname)
-    pprint(data)
+        if 'SYST_' in fname:
+            keyname = fname.split('SYST_')[-1].split('/')[0]
+            data.setdefault(keyname, [])
+            data[keyname].append(fname)
+        else:
+            data.setdefault('nominal', [])
+            data['nominal'].append(fname)
     return data
 
 
@@ -62,12 +56,24 @@ def main(args):
     print 'Files to process...'
     pprint(dict(filelist))
     for syst, ifiles in filelist.iteritems():
+        # if 'Rivet' in syst or 'MES' in syst or 'Jet' in syst or 'DM' in syst:
+        #   continue
+        # if not 'Rivet' in syst:
+        #   continue
+        # if not 'MES' in syst:
+        #   continue
+        # if not 'Jet' in syst:
+        #   continue
+        # if not 'DM' in syst:
+        #   continue
         if not path.exists('{}/{}'.format(args.output_dir, syst)):
           mkdir('{}/{}'.format(args.output_dir, syst))
         
         for ifile in ifiles:
+            # if not '125' in ifile:
+            #   continue
             fname = ifile.replace('.root', '').split('/')[-1]
-            print 'Processing file: {}'.format(fname)
+            print 'Processing file: {} from {}'.format(fname, ifile.split('merged')[0].split('/')[-2])
 
             open_file = uproot.open(ifile)
             nevents = open_file['nevents']
@@ -85,6 +91,9 @@ def main(args):
             scaler = StandardScaler()
             scaler.mean_ = scaler_info['mean'].values.reshape(1, -1)
             scaler.scale_ = scaler_info['scale'].values.reshape(1, -1)
+          
+            to_classify.fillna(-100, inplace=True)
+            to_classify.replace([numpy.inf, -numpy.inf], -100, inplace=True)
 
             # scale correctly
             scaled = pd.DataFrame(
@@ -94,10 +103,16 @@ def main(args):
             ## do the classification
             guesses = model.predict(scaled.values, verbose=True)
 
-            with uproot.recreate('{}/{}/{}.root'.format(args.output_dir, syst, fname)) as f:
-                f[tree_prefix] = uproot.newtree(treedict)
-                oldtree['NN_disc'] = guesses.reshape(len(guesses))
-                f[tree_prefix].extend(oldtree)
+            if 'embed' in fname:
+              with uproot.recreate('{}/{}/{}.root'.format(args.output_dir, syst, fname), compression=None) as f:
+                  f[tree_prefix] = uproot.newtree(treedict)
+                  oldtree['NN_disc'] = guesses.reshape(len(guesses))
+                  f[tree_prefix].extend(oldtree)
+            else:
+              with uproot.recreate('{}/{}/{}.root'.format(args.output_dir, syst, fname)) as f:
+                  f[tree_prefix] = uproot.newtree(treedict)
+                  oldtree['NN_disc'] = guesses.reshape(len(guesses))
+                  f[tree_prefix].extend(oldtree)
 
 
 

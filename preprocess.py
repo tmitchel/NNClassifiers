@@ -34,17 +34,13 @@ def build_filelist(el_input_dir, mu_input_dir):
     nominal = {'nominal': []}
     systematics = {}
     for fname in files:
-        ifile = uproot.open(fname)
-        for ikey in ifile.keys():
-            if not '_tree' in ikey:
-                continue
 
-            if 'SYST_' in fname:
-                keyname = fname.split('SYST_')[-1].split('/')[0]
-                systematics.setdefault(keyname, [])
-                systematics[keyname].append(fname)
-            else:
-                nominal['nominal'].append(fname)
+      if 'SYST_' in fname:
+          keyname = fname.split('SYST_')[-1].split('/')[0]
+          systematics.setdefault(keyname, [])
+          systematics[keyname].append(fname)
+      else:
+          nominal['nominal'].append(fname)
     pprint(nominal)
     pprint(systematics)
     return nominal, systematics
@@ -81,9 +77,12 @@ def get_labels(nevents, name):
 
     # get scaling label
     isSM = np.ones(nevents)
-    if ('_JHU_' in name or 'madgraph' in name) and not 'a1-prod_nom-decay' in name:
+    if 'JHU' in name or 'madgraph' in name:
         isSM = np.zeros(nevents)
     elif 'data' in name:
+        isSM = np.zeros(nevents)
+    elif 'embedmu' in name or 'embedel' in name:
+        print 'already saw this {} in embed.root'.format(name)
         isSM = np.zeros(nevents)
 
     return isSignal, isSM

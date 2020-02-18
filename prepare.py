@@ -24,8 +24,8 @@ scaled_vars = [
 
 
 def build_filelist(epath, mpath):
-    directories = [os.path.join(epath, idir) for idir in os.listdir(epath) if os.path.isdir(os.path.join(epath, idir))]
-    directories += [os.path.join(mpath, idir) for idir in os.listdir(mpath) if os.path.isdir(os.path.join(mpath, idir))]
+    directories = [os.path.join(epath, idir) for idir in os.listdir(epath) if os.path.isdir(os.path.join(epath, idir)) and not 'logs' in idir]
+    directories += [os.path.join(mpath, idir) for idir in os.listdir(mpath) if os.path.isdir(os.path.join(mpath, idir)) and not 'logs' in idir]
 
     nominal = {idir: [ifile.split('/')[-1]
                       for ifile in glob('{}/merged/*.root'.format(idir))]
@@ -78,7 +78,7 @@ def get_labels(nevents, name):
 
 def loadFile(path, ifile, open_file, syst='nominal'):
     print 'Loading input file...', path, 'with syst...', syst
-    if 'mutau' in path:
+    if 'mtau' in path:
         channel = 'mt'
     elif 'etau' in path:
         channel = 'et'
@@ -95,9 +95,9 @@ def loadFile(path, ifile, open_file, syst='nominal'):
     slim_df = input_df[(input_df['njets'] > 1) & (input_df['mjj'] > 300)]  # preselection
     # make sure our DataFrame is actually reasonable
     slim_df = slim_df.dropna(axis=0, how='any')  # drop events with a NaN
-    slim_df = slim_df.drop_duplicates()
-    slim_df = slim_df[(slim_df['Q2V1'] > -1e10) & (slim_df['Q2V1'] < 1e10)] / 100.
-    slim_df = slim_df[(slim_df['Q2V2'] > -1e10) & (slim_df['Q2V2'] < 1e10)] / 100.
+    # slim_df = slim_df.drop_duplicates()
+    slim_df = slim_df[(slim_df['Q2V1'] > -1e10) & (slim_df['Q2V1'] < 1e10)]
+    slim_df = slim_df[(slim_df['Q2V2'] > -1e10) & (slim_df['Q2V2'] < 1e10)]
     slim_df = slim_df[(slim_df['Phi'] > -2.1 * math.pi) & (slim_df['Phi']
                                                            < 2.1 * math.pi)]  # gave this a little wiggle room
     slim_df = slim_df[(slim_df['Phi1'] > -2.1 * math.pi) & (slim_df['Phi1'] < 2.1 * math.pi)]
@@ -161,7 +161,6 @@ def handle_file(all_data, idir, ifile):
     # weights scaled from 0 - 1
     all_data[syst]['weights'] = np.append(all_data[syst]['weights'], proc_file['weights'])
     all_data[syst]['index'] = np.append(all_data[syst]['index'], proc_file['index'])
-
     return all_data
 
 

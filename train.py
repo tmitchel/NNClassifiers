@@ -1,7 +1,7 @@
 from sklearn.model_selection import train_test_split
 from time import time
 from os import environ
-from visualize import discPlot
+from visualize import discPlot, trainingPlots
 environ['KERAS_BACKEND'] = 'tensorflow'
 from keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard
 from keras.layers import Dense, Dropout
@@ -88,10 +88,12 @@ def main(args):
     )
 
     ## train that there model, my dude
-    _ = model.fit(training_data, training_labels, shuffle=True,
+    history = model.fit(training_data, training_labels, shuffle=True,
                         epochs=10000, batch_size=1024, verbose=True,
                         callbacks=callbacks, validation_split=0.25, sample_weight=training_weights
                         )
+    
+    trainingPlots(history, 'trainingPlot_{}'.format(args.model))
 
     if not args.dont_plot:
         test_sig, test_bkg = [], []
